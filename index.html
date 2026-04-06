@@ -1,0 +1,1774 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BeautyPro</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+// ⚠️  ЗАМЕНИТЕ на ваш Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyD6wnCYIGciW_VRujcxlis7HEgGfWC6vOA",
+  authDomain: "telegram-crm-85b05.firebaseapp.com",
+  projectId: "telegram-crm-85b05",
+  storageBucket: "telegram-crm-85b05.firebasestorage.app",
+  messagingSenderId: "499866542692",
+  appId: "G-613KEDVY7V"
+};
+
+try {
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+  const auth = getAuth(app);
+  window._FB = { db, auth, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, signInAnonymously };
+  window._fbReady = true;
+} catch(e) {
+  console.warn('Firebase init failed:', e.message);
+  window._fbReady = false;
+}
+window.dispatchEvent(new Event('fbReady'));
+</script>
+
+<style>
+:root{
+  --bg:#0e0e12;--bg2:#141418;--bg3:#1a1a20;--bg4:#22222a;
+  --card:#17171d;--border:#252530;--border2:#303040;
+  --acc:#c084fc;--acc2:#a855f7;--acc3:rgba(192,132,252,.15);
+  --teal:#2dd4bf;--teal2:rgba(45,212,191,.15);
+  --amber:#fbbf24;--amber2:rgba(251,191,36,.12);
+  --rose:#fb7185;--rose2:rgba(251,113,133,.12);
+  --green:#4ade80;--green2:rgba(74,222,128,.12);
+  --blue:#60a5fa;--blue2:rgba(96,165,250,.12);
+  --text:#f0f0f8;--text2:#8888a0;--text3:#44445a;
+  --r:14px;--rsm:10px;--nav:72px;
+  --ease:.28s cubic-bezier(.4,0,.2,1);
+  --spring:.38s cubic-bezier(.34,1.56,.64,1);
+  --mono:'DM Mono',monospace
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Manrope',sans-serif}
+
+/* ── SCREENS ── */
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg);
+  opacity:0;pointer-events:none;transform:translateY(16px);
+  transition:opacity var(--ease),transform var(--ease);overflow:hidden}
+.screen.active{opacity:1;pointer-events:all;transform:none}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+
+/* ── SPLASH ── */
+#splash{align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 35%,rgba(168,85,247,.2) 0%,transparent 65%),var(--bg)}
+.splash-logo{width:96px;height:96px;border-radius:28px;
+  background:linear-gradient(135deg,#a855f7,#7c3aed);
+  display:flex;align-items:center;justify-content:center;font-size:46px;
+  animation:logoPulse 2.5s ease-in-out infinite;
+  box-shadow:0 0 0 1px rgba(192,132,252,.3),0 20px 60px rgba(168,85,247,.45)}
+@keyframes logoPulse{0%,100%{box-shadow:0 0 0 1px rgba(192,132,252,.3),0 20px 50px rgba(168,85,247,.35)}50%{box-shadow:0 0 0 2px rgba(192,132,252,.5),0 24px 70px rgba(168,85,247,.65)}}
+.splash-name{font-family:'Playfair Display',serif;font-size:32px;font-weight:600;margin-top:20px;letter-spacing:-.3px}
+.splash-tag{font-size:11px;color:var(--text2);margin-top:5px;letter-spacing:1.2px;text-transform:uppercase}
+.splash-bar{width:160px;height:3px;background:var(--bg4);border-radius:2px;margin-top:52px;overflow:hidden}
+.splash-prog{height:100%;background:linear-gradient(90deg,var(--acc),var(--teal));border-radius:2px;animation:prog 2.3s ease forwards}
+@keyframes prog{from{width:0}to{width:100%}}
+
+/* ── AUTH / ONBOARD ── */
+.auth-screen{overflow-y:auto}
+.auth-wrap{padding:52px 24px 48px;min-height:100%;display:flex;flex-direction:column}
+.auth-logo{font-size:40px;margin-bottom:18px}
+.auth-title{font-family:'Playfair Display',serif;font-size:26px;font-weight:600;margin-bottom:8px;line-height:1.2}
+.auth-sub{font-size:14px;color:var(--text2);margin-bottom:32px;line-height:1.6}
+
+/* ── FORM ── */
+.sec-lbl{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;margin-top:20px}
+.fg{display:flex;flex-direction:column;gap:10px}
+.fr{display:flex;gap:10px}
+.fld{flex:1;position:relative}
+.fld label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:.3px}
+.fld input,.fld select,.fld textarea{
+  width:100%;padding:13px 15px;border-radius:var(--rsm);
+  border:1.5px solid var(--border);background:var(--bg3);color:var(--text);
+  font-family:'Manrope',sans-serif;font-size:15px;outline:none;
+  transition:border-color var(--ease),background var(--ease);
+  -webkit-appearance:none;appearance:none}
+.fld select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238888a0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+.fld input:focus,.fld select:focus,.fld textarea:focus{border-color:var(--acc);background:var(--bg4)}
+.fld input::placeholder,.fld textarea::placeholder{color:var(--text3)}
+.fld textarea{resize:none;min-height:64px;line-height:1.5}
+.fld input[readonly]{color:var(--text2);cursor:default;background:var(--bg2)}
+.fld input[readonly]:focus{border-color:var(--border)}
+.phone-lock{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3)}
+
+/* ROLE CARDS */
+.role-grid{display:flex;flex-direction:column;gap:12px;margin-bottom:24px}
+.role-card{padding:18px 18px;border-radius:18px;border:1.5px solid var(--border2);background:var(--card);
+  cursor:pointer;display:flex;align-items:center;gap:16px;transition:all var(--ease);position:relative;overflow:hidden}
+.role-card.sel{border-color:var(--acc)}
+.role-card.sel::after{content:'✓';position:absolute;right:16px;top:50%;transform:translateY(-50%);
+  width:26px;height:26px;border-radius:50%;background:var(--acc);color:#fff;font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+.role-card:active{transform:scale(.98)}
+.rc-icon{width:52px;height:52px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+.rc-cli{background:rgba(45,212,191,.2)}.rc-own{background:rgba(192,132,252,.2)}.rc-mst{background:rgba(251,191,36,.15)}
+.rc-body{flex:1;min-width:0}
+.rc-name{font-size:16px;font-weight:700;margin-bottom:3px}
+.rc-desc{font-size:12px;color:var(--text2);line-height:1.4}
+
+/* BTYPE */
+.btype-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.btype-card{padding:14px 10px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--card);
+  cursor:pointer;text-align:center;transition:all var(--ease)}
+.btype-card.sel{border-color:var(--acc);background:var(--acc3)}
+.btype-card:active{transform:scale(.97)}
+.bt-icon{font-size:26px;margin-bottom:7px}
+.bt-name{font-size:12px;font-weight:700}
+.bt-desc{font-size:10px;color:var(--text2);margin-top:2px;line-height:1.4}
+
+/* ── BUTTONS ── */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:15px 20px;border-radius:var(--r);border:none;cursor:pointer;font-family:'Manrope',sans-serif;font-size:15px;font-weight:700;transition:all var(--ease);width:100%}
+.btn:active{transform:scale(.97)}
+.btn-acc{background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;box-shadow:0 6px 20px rgba(168,85,247,.35)}
+.btn-teal{background:linear-gradient(135deg,#2dd4bf,#0891b2);color:#fff;box-shadow:0 6px 20px rgba(45,212,191,.3)}
+.btn-out{background:transparent;color:var(--text);border:1.5px solid var(--border2)}
+.btn-out:active{background:var(--bg3)}
+.btn-sm{padding:9px 14px;font-size:12px;border-radius:var(--rsm);width:auto}
+.btn-ghost{background:var(--bg4);color:var(--text2);border:none;font-weight:500}
+.btn-rose{background:var(--rose2);color:var(--rose);border:1px solid rgba(251,113,133,.3)}
+.btn-amber{background:var(--amber2);color:var(--amber);border:1px solid rgba(251,191,36,.3)}
+.btn-green{background:var(--green2);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+.btn-blue{background:var(--blue2);color:var(--blue);border:1px solid rgba(96,165,250,.3)}
+.btn:disabled{opacity:.35;pointer-events:none}
+.btn-loading{position:relative;pointer-events:none}
+.btn-loading::after{content:'';position:absolute;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── HEADER ── */
+.mhdr{padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg)}
+.hdr-l{display:flex;flex-direction:column;gap:2px}
+.hdr-g{font-size:11px;color:var(--text3);font-weight:500;letter-spacing:.3px}
+.hdr-n{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;line-height:1.2}
+.hdr-r{display:flex;align-items:center;gap:10px}
+.icon-btn{width:38px;height:38px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid var(--border);font-size:16px;transition:all var(--ease);position:relative;flex-shrink:0}
+.icon-btn:active{background:var(--bg4)}
+.notif-dot{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--rose);border:2px solid var(--bg)}
+.avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;cursor:pointer;flex-shrink:0}
+.av-acc{background:linear-gradient(135deg,#a855f7,#7c3aed)}
+.av-teal{background:linear-gradient(135deg,#2dd4bf,#0891b2)}
+.av-amber{background:linear-gradient(135deg,#fbbf24,#d97706)}
+.back-btn{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:var(--text2);background:none;border:none;cursor:pointer;padding:4px 0}
+
+/* ── SCROLL ── */
+.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px);-webkit-overflow-scrolling:touch}
+.scroll::-webkit-scrollbar{display:none}
+.scroll-full{flex:1;overflow-y:auto;padding:16px 20px 32px;-webkit-overflow-scrolling:touch}
+.scroll-full::-webkit-scrollbar{display:none}
+
+/* ── BOTTOM NAV ── */
+.bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nav);
+  background:rgba(14,14,18,.93);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);display:flex;align-items:center;
+  padding:0 4px;padding-bottom:env(safe-area-inset-bottom);z-index:100}
+.ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 4px;cursor:pointer;border:none;background:none;position:relative;border-radius:var(--rsm);transition:all var(--ease)}
+.ni-bar{position:absolute;top:0;left:50%;transform:translateX(-50%);width:20px;height:3px;border-radius:0 0 3px 3px;background:var(--acc);opacity:0;transition:opacity var(--ease)}
+.ni.on .ni-bar{opacity:1}
+.ni-ico{font-size:21px;transition:transform var(--spring)}
+.ni-lbl{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.3px;transition:color var(--ease);text-transform:uppercase}
+.ni.on .ni-lbl{color:var(--acc)}
+.ni.on .ni-ico{transform:scale(1.12)}
+.ni-pip{position:absolute;top:7px;right:calc(50% - 14px);width:6px;height:6px;border-radius:50%;background:var(--rose);border:2px solid var(--bg);display:none}
+.ni-pip.vis{display:block}
+/* Teal variant for client */
+.bnav-teal .ni.on .ni-bar{background:var(--teal)}
+.bnav-teal .ni.on .ni-lbl{color:var(--teal)}
+/* Amber variant for master */
+.bnav-amber .ni.on .ni-bar{background:var(--amber)}
+.bnav-amber .ni.on .ni-lbl{color:var(--amber)}
+
+/* ── CARDS ── */
+.card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);overflow:hidden;margin-bottom:12px}
+.card-body{padding:14px 16px}
+
+/* STAT */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:16px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:-20px;right:-20px;width:70px;height:70px;border-radius:50%;opacity:.07}
+.s-acc::before{background:var(--acc2)}.s-teal::before{background:var(--teal)}.s-amber::before{background:var(--amber)}.s-rose::before{background:var(--rose)}
+.stat-lbl{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:.2px}
+.stat-v{font-family:var(--mono);font-size:26px;font-weight:500;line-height:1.1;margin-bottom:4px}
+.stat-sub{font-size:11px;color:var(--text3)}
+.stat-ico{font-size:18px;position:absolute;top:14px;right:14px;opacity:.45}
+
+/* APPT */
+.appt-slot{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px;margin-bottom:10px;display:flex;gap:12px;cursor:pointer;transition:background var(--ease);animation:fadeUp .3s ease both}
+.appt-slot:active{background:var(--bg4)}
+.appt-time{display:flex;flex-direction:column;align-items:center;min-width:46px}
+.appt-t1{font-family:var(--mono);font-size:15px;font-weight:500}
+.appt-t2{font-family:var(--mono);font-size:11px;color:var(--text3)}
+.appt-div{width:1px;background:var(--border2);margin:0 2px}
+.appt-info{flex:1;min-width:0}
+.appt-client{font-size:14px;font-weight:700;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.appt-svc{font-size:12px;color:var(--text2);margin-bottom:5px}
+.appt-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.appt-r{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.appt-price{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--acc)}
+.appt-dur{font-family:var(--mono);font-size:11px;color:var(--text3)}
+.salon-tag{font-size:11px;color:var(--teal);background:var(--teal2);padding:2px 8px;border-radius:6px;font-weight:600}
+
+/* BADGE */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.2px}
+.bd-wait{background:var(--amber2);color:var(--amber)}
+.bd-conf{background:var(--acc3);color:var(--acc)}
+.bd-done{background:var(--green2);color:var(--green)}
+.bd-canc{background:var(--rose2);color:var(--rose)}
+.bd-act{background:var(--teal2);color:var(--teal)}
+.dot-p{width:6px;height:6px;border-radius:50%;background:currentColor;animation:dp 1.4s ease-in-out infinite}
+@keyframes dp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
+
+/* CHIP */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:20px;border:1.5px solid var(--border);background:var(--card);cursor:pointer;font-size:12px;font-weight:600;transition:all var(--ease);white-space:nowrap;color:var(--text2)}
+.chip.on{border-color:var(--acc);background:var(--acc3);color:var(--acc)}
+.chip.on-teal{border-color:var(--teal);background:var(--teal2);color:var(--teal)}
+.chip:active{transform:scale(.96)}
+
+/* SECTION */
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;margin-top:4px}
+.sec-t{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px}
+.sec-a{font-size:13px;font-weight:600;color:var(--acc);cursor:pointer}
+.sec-a-teal{color:var(--teal)}
+
+/* SEARCH */
+.search-wrap{position:relative;margin-bottom:12px}
+.search-ico{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3)}
+.search-inp{width:100%;padding:12px 14px 12px 40px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--bg3);color:var(--text);font-family:'Manrope',sans-serif;font-size:14px;outline:none;transition:border-color var(--ease)}
+.search-inp:focus{border-color:var(--teal)}
+.search-inp::placeholder{color:var(--text3)}
+
+/* CALENDAR */
+.cal-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;scrollbar-width:none}
+.cal-strip::-webkit-scrollbar{display:none}
+.cal-day{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;padding:10px 6px;border-radius:var(--r);border:1.5px solid var(--border);cursor:pointer;transition:all var(--ease);flex-shrink:0;background:var(--bg3)}
+.cal-day.on{border-color:var(--acc);background:var(--acc3)}
+.cal-day.today .cal-d{color:var(--acc)}
+.cal-wd{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.cal-d{font-family:var(--mono);font-size:18px;font-weight:500;line-height:1}
+.cal-pip{width:5px;height:5px;border-radius:50%;background:var(--acc);margin-top:2px;opacity:0}
+.cal-day.has-appt .cal-pip{opacity:1}
+
+/* TIME SLOTS */
+.time-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.ts{padding:11px 6px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);text-align:center;font-family:var(--mono);font-size:13px;font-weight:500;cursor:pointer;transition:all var(--ease);color:var(--text2)}
+.ts.on{border-color:var(--teal);background:var(--teal2);color:var(--teal)}
+.ts.busy{opacity:.25;pointer-events:none;text-decoration:line-through}
+.ts:active:not(.busy){transform:scale(.95)}
+
+/* WIZ STEPS */
+.wiz-steps{display:flex;gap:6px;margin-bottom:20px}
+.wiz-step{flex:1;height:3px;border-radius:2px;background:var(--border);transition:background var(--ease)}
+.wiz-step.done{background:var(--acc)}.wiz-step.active{background:linear-gradient(90deg,var(--acc2),var(--teal))}
+
+/* BOOKING CONFIRM */
+.bconf{border-radius:var(--r);border:1px solid rgba(192,132,252,.2);padding:16px;margin-bottom:16px;background:linear-gradient(135deg,var(--acc3),rgba(45,212,191,.07))}
+.bconf.cli{background:linear-gradient(135deg,var(--teal2),rgba(192,132,252,.07));border-color:rgba(45,212,191,.2)}
+.bc-row{display:flex;align-items:flex-start;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)}
+.bc-row:last-child{border-bottom:none}
+.bc-ico{font-size:17px;width:26px;text-align:center;flex-shrink:0;margin-top:1px}
+.bc-lbl{font-size:11px;color:var(--text2);margin-bottom:2px;font-weight:600;letter-spacing:.2px}
+.bc-val{font-size:14px;font-weight:600}
+
+/* PROFILE */
+.prof-banner{border-radius:var(--r);border:1px solid rgba(192,132,252,.2);padding:20px;margin-bottom:16px;display:flex;gap:16px;align-items:center}
+.prof-banner.teal{border-color:rgba(45,212,191,.2);background:linear-gradient(135deg,rgba(45,212,191,.12),rgba(168,85,247,.06))}
+.prof-banner.amber{border-color:rgba(251,191,36,.2);background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(168,85,247,.06))}
+.prof-banner.acc{background:linear-gradient(135deg,rgba(168,85,247,.15),rgba(45,212,191,.07))}
+.prof-av{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
+.prof-av img{width:100%;height:100%;object-fit:cover}
+.prof-n{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;margin-bottom:3px}
+.prof-role{font-size:12px;font-weight:700;letter-spacing:.3px}
+.prof-meta{font-size:12px;color:var(--text2);margin-top:2px}
+
+/* SALON CARD (client catalog) */
+.salon-card{background:var(--card);border-radius:20px;border:1px solid var(--border);margin-bottom:14px;overflow:hidden;cursor:pointer;transition:all var(--ease)}
+.salon-card:active{transform:scale(.99);background:var(--bg3)}
+.salon-cover{height:100px;display:flex;align-items:center;justify-content:center;font-size:52px;position:relative;overflow:hidden}
+.salon-cover img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.salon-cover-ico{position:relative;z-index:1;font-size:50px;text-shadow:0 2px 12px rgba(0,0,0,.5)}
+.salon-badge{position:absolute;top:10px;right:10px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;z-index:2}
+.sb-open{background:rgba(74,222,128,.2);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+.sb-closed{background:rgba(251,113,133,.15);color:var(--rose);border:1px solid rgba(251,113,133,.25)}
+.sub-btn{position:absolute;top:10px;left:10px;padding:5px 11px;border-radius:20px;font-size:11px;font-weight:700;border:none;cursor:pointer;z-index:2;transition:all var(--ease)}
+.sub-btn.subbed{background:rgba(192,132,252,.25);color:var(--acc);border:1px solid rgba(192,132,252,.4)}
+.sub-btn.not-subbed{background:rgba(0,0,0,.45);color:var(--text2);border:1px solid rgba(255,255,255,.1)}
+.salon-body{padding:13px 16px}
+.salon-name{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;margin-bottom:4px}
+.salon-type{font-size:12px;font-weight:600;margin-bottom:8px}
+.salon-meta{display:flex;gap:10px;flex-wrap:wrap}
+.salon-m{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px}
+
+/* SERVICE */
+.svc-item{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;transition:all var(--ease)}
+.svc-ico{width:40px;height:40px;border-radius:var(--rsm);background:var(--acc3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.svc-info{flex:1;min-width:0}
+.svc-name{font-size:14px;font-weight:600;margin-bottom:3px}
+.svc-dur{font-family:var(--mono);font-size:12px;color:var(--text2)}
+.svc-price{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--acc);flex-shrink:0}
+.svc-book{cursor:pointer;transition:all var(--ease)}
+.svc-book.sel{border-color:var(--teal);background:var(--teal2)}
+.svc-book:active{transform:scale(.98)}
+
+/* MASTER */
+.master-card{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:16px;margin-bottom:10px;display:flex;gap:14px;align-items:center}
+.master-opt{background:var(--bg3);border-radius:var(--r);border:1.5px solid var(--border);padding:14px;margin-bottom:8px;display:flex;gap:12px;align-items:center;cursor:pointer;transition:all var(--ease)}
+.master-opt.sel{border-color:var(--teal);background:var(--teal2)}
+.master-opt:active{transform:scale(.98)}
+.master-av{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0}
+.master-info{flex:1;min-width:0}
+.master-name{font-size:14px;font-weight:700;margin-bottom:3px}
+.master-spec{font-size:12px;color:var(--text2);margin-bottom:4px}
+.master-stats{display:flex;gap:10px;flex-wrap:wrap}
+.master-stat{font-size:11px;color:var(--text3)}
+
+/* CLIENT ROW */
+.client-row{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px 16px;margin-bottom:8px;display:flex;gap:12px;align-items:center;cursor:pointer;transition:all var(--ease)}
+.client-row:active{background:var(--bg4)}
+
+/* MENU */
+.menu-list{display:flex;flex-direction:column;gap:2px;margin-bottom:20px}
+.menu-item{display:flex;align-items:center;gap:14px;padding:15px 16px;background:var(--bg3);border-radius:var(--rsm);cursor:pointer;transition:background var(--ease);border:none;width:100%;text-align:left;color:var(--text)}
+.menu-item:active{background:var(--bg4)}
+.menu-ico{width:36px;height:36px;border-radius:var(--rsm);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.mi-a{background:var(--acc3)}.mi-t{background:var(--teal2)}.mi-b{background:var(--amber2)}.mi-r{background:var(--rose2)}.mi-bl{background:var(--blue2)}
+.menu-txt{flex:1;font-size:15px;font-weight:500}
+.menu-arr{color:var(--text3)}
+.menu-val{font-family:var(--mono);font-size:12px;color:var(--text2);margin-right:6px}
+
+/* QA */
+.qa-row{display:flex;gap:10px;margin-bottom:16px}
+.qa{flex:1;padding:14px 8px;border-radius:var(--r);border:1px solid var(--border);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;transition:all var(--ease)}
+.qa:active{transform:scale(.96);background:var(--bg3)}
+.qa-ico{font-size:22px}
+.qa-lbl{font-size:11px;font-weight:600;color:var(--text2);text-align:center;line-height:1.3}
+
+/* MY BOOKING */
+.my-bk{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px 16px;margin-bottom:10px;animation:fadeUp .3s ease both}
+.my-bk-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.my-bk-salon{font-size:15px;font-weight:700}
+.my-bk-type{font-size:11px;color:var(--text2);margin-top:2px}
+.my-bk-total{font-family:var(--mono);font-size:17px;font-weight:500;color:var(--teal);margin-top:10px}
+
+/* ROLE SWITCH PILL */
+.role-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:.3px}
+.rp-cli{background:var(--teal2);color:var(--teal)}
+.rp-own{background:var(--acc3);color:var(--acc)}
+.rp-mst{background:var(--amber2);color:var(--amber)}
+
+/* IMAGE UPLOAD */
+.img-upload{border:2px dashed var(--border2);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all var(--ease);position:relative;overflow:hidden}
+.img-upload:hover{border-color:var(--acc)}
+.img-upload img{width:100%;height:160px;object-fit:cover;border-radius:var(--rsm);display:block}
+.img-upload-hint{font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5}
+.img-upload input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+
+/* MODAL */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;z-index:200;opacity:0;pointer-events:none;transition:opacity var(--ease);backdrop-filter:blur(6px)}
+.modal.open{opacity:1;pointer-events:all}
+.modal-sheet{width:100%;background:var(--bg2);border-radius:24px 24px 0 0;border-top:1px solid var(--border);padding:0 20px 40px;transform:translateY(100%);transition:transform .38s cubic-bezier(.4,0,.2,1);max-height:90vh;overflow-y:auto}
+.modal.open .modal-sheet{transform:none}
+.modal-pill{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:12px auto 18px}
+.modal-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:16px}
+
+/* TOAST */
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-110px);background:var(--bg3);border:1px solid var(--border);border-radius:var(--rsm);padding:11px 20px;font-size:14px;font-weight:600;z-index:300;transition:transform .35s cubic-bezier(.4,0,.2,1);white-space:nowrap;max-width:92vw;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.s{border-color:rgba(74,222,128,.4)}.toast.e{border-color:rgba(251,113,133,.4)}.toast.i{border-color:rgba(192,132,252,.4)}
+
+/* EMPTY */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:44px 20px;text-align:center;gap:10px}
+.empty-ico{font-size:44px;opacity:.25}
+.empty-txt{color:var(--text2);font-size:14px;line-height:1.6}
+
+/* SPINNER */
+.spin-center{display:flex;align-items:center;justify-content:center;padding:48px}
+.spinner{width:32px;height:32px;border:2.5px solid var(--border2);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
+.divider{height:1px;background:var(--border);margin:16px 0}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SPLASH ══════════════ -->
+<div class="screen active" id="splash">
+  <div style="display:flex;flex-direction:column;align-items:center">
+    <div class="splash-logo">✦</div>
+    <div class="splash-name">BeautyPro</div>
+    <div class="splash-tag">Beauty Platform</div>
+    <div class="splash-bar"><div class="splash-prog"></div></div>
+  </div>
+</div>
+
+<!-- ══════════════ AUTH: ONBOARD ══════════════ -->
+<div class="screen auth-screen" id="s-onboard">
+  <div class="auth-wrap" id="onboard-body">
+    <!-- rendered by JS -->
+  </div>
+</div>
+
+<!-- ══════════════ ADMIN SCREENS ══════════════ -->
+
+<!-- OWNER DASHBOARD -->
+<div class="screen" id="s-dash">
+  <div class="mhdr">
+    <div class="hdr-l"><div class="hdr-g" id="dsh-g">Добрый день,</div><div class="hdr-n" id="dsh-n">—</div></div>
+    <div class="hdr-r">
+      <div class="icon-btn" onclick="openModal('m-notif')">🔔<div class="notif-dot" id="notif-dot" style="display:none"></div></div>
+      <div class="avatar av-acc" id="dsh-av" onclick="aTab('prof')">A</div>
+    </div>
+  </div>
+  <div class="scroll">
+    <div class="cal-strip" id="a-cal"></div>
+    <div class="stat-grid">
+      <div class="stat-card s-acc"><div class="stat-ico">📅</div><div class="stat-lbl">Записей сегодня</div><div class="stat-v" id="sa-appts">0</div></div>
+      <div class="stat-card s-teal"><div class="stat-ico">💰</div><div class="stat-lbl">Выручка</div><div class="stat-v" id="sa-rev">0₸</div></div>
+      <div class="stat-card s-amber"><div class="stat-ico">⏳</div><div class="stat-lbl">Ожидают</div><div class="stat-v" id="sa-pend">0</div></div>
+      <div class="stat-card s-rose"><div class="stat-ico">👥</div><div class="stat-lbl">Клиентов</div><div class="stat-v" id="sa-clients">0</div></div>
+    </div>
+    <div class="qa-row">
+      <div class="qa" onclick="openNewBooking()"><div class="qa-ico">➕</div><div class="qa-lbl">Новая запись</div></div>
+      <div class="qa" onclick="aTab('sched')"><div class="qa-ico">📆</div><div class="qa-lbl">Расписание</div></div>
+      <div class="qa" onclick="aTab('clients')"><div class="qa-ico">👥</div><div class="qa-lbl">Клиенты</div></div>
+      <div class="qa" onclick="aTab('svcs')"><div class="qa-ico">💎</div><div class="qa-lbl">Услуги</div></div>
+    </div>
+    <div class="sec-hdr"><div class="sec-t">Сегодня</div><div class="sec-a" onclick="aTab('sched')">Всё →</div></div>
+    <div id="a-today"></div>
+  </div>
+  <div class="bnav" id="a-bnav">
+    <button class="ni on" id="ani-dash" onclick="aTab('dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
+    <button class="ni" id="ani-sched" onclick="aTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span><div class="ni-pip" id="apip-s"></div></button>
+    <button class="ni" id="ani-clients" onclick="aTab('clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
+    <button class="ni" id="ani-svcs" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni" id="ani-prof" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- OWNER SCHEDULE -->
+<div class="screen" id="s-sched">
+  <div class="mhdr"><div class="hdr-n">Расписание</div><button class="btn btn-sm btn-acc" style="width:auto" onclick="openNewBooking()">+ Запись</button></div>
+  <div class="scroll">
+    <div class="cal-strip" id="a-cal2"></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none" id="a-mf"></div>
+    <div id="a-sched-list"></div>
+  </div>
+  <div class="bnav">
+    <button class="ni" onclick="aTab('dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
+    <button class="ni on" onclick="aTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span></button>
+    <button class="ni" onclick="aTab('clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
+    <button class="ni" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- OWNER CLIENTS -->
+<div class="screen" id="s-clients">
+  <div class="mhdr"><div class="hdr-n">Клиенты</div><button class="btn btn-sm btn-acc" style="width:auto" onclick="openModal('m-add-client')">+ Клиент</button></div>
+  <div class="scroll">
+    <div class="search-wrap"><span class="search-ico">🔍</span><input class="search-inp" type="text" placeholder="Поиск клиента..." oninput="filterClients(this.value)"></div>
+    <div id="a-client-list"></div>
+  </div>
+  <div class="bnav">
+    <button class="ni" onclick="aTab('dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
+    <button class="ni" onclick="aTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span></button>
+    <button class="ni on" onclick="aTab('clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
+    <button class="ni" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- OWNER SERVICES + MASTERS -->
+<div class="screen" id="s-svcs">
+  <div class="mhdr"><div class="hdr-n">Услуги и мастера</div><button class="btn btn-sm btn-acc" style="width:auto" onclick="openModal('m-add-svc')">+ Услуга</button></div>
+  <div class="scroll">
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <div class="chip on" id="svctab-s" onclick="svcsTab('s')">💎 Услуги</div>
+      <div class="chip" id="svctab-m" onclick="svcsTab('m')">👩‍💼 Мастера</div>
+    </div>
+    <div id="svcs-panel"><div id="a-svc-list"></div></div>
+    <div id="masters-panel" style="display:none"><div id="a-masters-list"></div><button class="btn btn-out" style="margin-top:8px" onclick="openModal('m-add-master')">+ Добавить мастера</button></div>
+  </div>
+  <div class="bnav">
+    <button class="ni" onclick="aTab('dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
+    <button class="ni" onclick="aTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span></button>
+    <button class="ni" onclick="aTab('clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
+    <button class="ni on" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- OWNER + MASTER + CLIENT PROFILE -->
+<div class="screen" id="s-prof">
+  <div class="scroll-full" style="padding-top:16px;padding-bottom:calc(var(--nav)+16px)">
+    <div id="prof-body"></div>
+  </div>
+  <div class="bnav" id="prof-bnav"></div>
+</div>
+
+<!-- CLIENT DETAIL (admin) -->
+<div class="screen" id="s-client-detail">
+  <div class="mhdr">
+    <button class="back-btn" onclick="showScreen('s-clients')">← Назад</button>
+    <div class="hdr-n" id="cd-name">Клиент</div>
+    <button class="btn btn-sm btn-acc" style="width:auto" onclick="openNewBooking(curClientId)">Записать</button>
+  </div>
+  <div class="scroll-full" id="cd-body"></div>
+</div>
+
+<!-- ══════════════ CLIENT SCREENS ══════════════ -->
+
+<div class="screen" id="s-catalog">
+  <div class="mhdr">
+    <div class="hdr-l"><div class="hdr-g">BeautyPro</div><div class="hdr-n">Каталог</div></div>
+    <div class="hdr-r"><div class="avatar av-teal" id="cli-av" onclick="cliTab('prof')">К</div></div>
+  </div>
+  <div class="scroll">
+    <div class="search-wrap"><span class="search-ico">🔍</span><input class="search-inp" type="text" placeholder="Название, адрес..." oninput="filterSalons(this.value)" id="s-search"></div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none" id="c-cat-filter"></div>
+    <div id="c-salon-list"></div>
+  </div>
+  <div class="bnav bnav-teal">
+    <button class="ni on" onclick="cliTab('catalog')"><div class="ni-bar"></div><span class="ni-ico">🌸</span><span class="ni-lbl">Салоны</span></button>
+    <button class="ni" onclick="cliTab('bookings')"><div class="ni-bar"></div><span class="ni-ico">📋</span><span class="ni-lbl">Записи</span><div class="ni-pip" id="cli-pip"></div></button>
+    <button class="ni" onclick="cliTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<div class="screen" id="s-salon">
+  <div class="mhdr">
+    <button class="back-btn" onclick="showScreen('s-catalog')">← Назад</button>
+    <div class="hdr-n" id="salon-hdr">Салон</div>
+    <div style="width:38px"></div>
+  </div>
+  <div class="scroll-full" id="s-salon-body"></div>
+</div>
+
+<div class="screen" id="s-booking">
+  <div class="mhdr">
+    <button class="back-btn" id="s-booking-back">← Назад</button>
+    <div class="hdr-n">Запись</div>
+    <div style="width:38px"></div>
+  </div>
+  <div class="scroll-full" id="s-booking-body"></div>
+</div>
+
+<div class="screen" id="s-mybookings">
+  <div class="mhdr"><div class="hdr-n">Мои записи</div></div>
+  <div class="scroll bnav-teal" id="s-mybk-list"></div>
+  <div class="bnav bnav-teal">
+    <button class="ni" onclick="cliTab('catalog')"><div class="ni-bar"></div><span class="ni-ico">🌸</span><span class="ni-lbl">Салоны</span></button>
+    <button class="ni on" onclick="cliTab('bookings')"><div class="ni-bar"></div><span class="ni-ico">📋</span><span class="ni-lbl">Записи</span></button>
+    <button class="ni" onclick="cliTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- ══════════════ MASTER SCREENS ══════════════ -->
+
+<div class="screen" id="s-master-sched">
+  <div class="mhdr">
+    <div class="hdr-l"><div class="hdr-g">Расписание мастера</div><div class="hdr-n" id="mst-hdr-n">—</div></div>
+    <div class="avatar av-amber" id="mst-av" onclick="mstTab('prof')">М</div>
+  </div>
+  <div class="scroll">
+    <div class="cal-strip" id="m-cal"></div>
+    <div id="m-sched-list"></div>
+  </div>
+  <div class="bnav bnav-amber">
+    <button class="ni on" onclick="mstTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Расписание</span></button>
+    <button class="ni" onclick="mstTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- ══════════════ MODALS ══════════════ -->
+
+<!-- NEW BOOKING (admin) -->
+<div class="modal" id="m-new-booking">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Новая запись</div>
+    <div class="wiz-steps"><div class="wiz-step active" id="ws1"></div><div class="wiz-step" id="ws2"></div><div class="wiz-step" id="ws3"></div><div class="wiz-step" id="ws4"></div></div>
+    <div id="wiz-body"></div>
+  </div>
+</div>
+
+<!-- ADD CLIENT -->
+<div class="modal" id="m-add-client">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Новый клиент</div>
+    <div class="fg">
+      <div class="fr"><div class="fld"><label>Имя</label><input type="text" id="ac-name" placeholder="Имя"></div><div class="fld"><label>Фамилия</label><input type="text" id="ac-sname" placeholder="Фамилия"></div></div>
+      <div class="fld"><label>Телефон</label><input type="tel" id="ac-phone" placeholder="+7..."></div>
+      <div class="fld"><label>День рождения</label><input type="date" id="ac-dob"></div>
+      <div class="fld"><label>Заметка</label><textarea id="ac-note" placeholder="Аллергии, предпочтения..."></textarea></div>
+    </div>
+    <button class="btn btn-acc" style="margin-top:16px" onclick="addClient()">Добавить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-add-client')">Отмена</button>
+  </div>
+</div>
+
+<!-- ADD SERVICE -->
+<div class="modal" id="m-add-svc">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Новая услуга</div>
+    <div class="fg">
+      <div class="fld"><label>Название</label><input type="text" id="as-name" placeholder="Стрижка, маникюр..."></div>
+      <div class="fr"><div class="fld"><label>Цена (₸)</label><input type="number" id="as-price" placeholder="3000" min="0"></div><div class="fld"><label>Длительность (мин)</label><input type="number" id="as-dur" placeholder="60" min="15" step="15"></div></div>
+      <div class="fld"><label>Категория</label>
+        <select id="as-cat">
+          <option value="hair">✂️ Волосы</option><option value="nails">💅 Ногти</option>
+          <option value="brows">👁️ Брови / ресницы</option><option value="skin">🌿 Косметология</option>
+          <option value="barber">🪒 Барбер</option><option value="massage">💆 Массаж / СПА</option>
+          <option value="other">⭐ Другое</option>
+        </select></div>
+    </div>
+    <button class="btn btn-acc" style="margin-top:16px" onclick="addService()">Добавить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-add-svc')">Отмена</button>
+  </div>
+</div>
+
+<!-- ADD MASTER -->
+<div class="modal" id="m-add-master">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Добавить мастера</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5">Укажите телефон мастера, который привязан к его Telegram-аккаунту. По нему он увидит ваш салон в своём профиле.</p>
+    <div class="fg">
+      <div class="fld"><label>Телефон мастера (из Telegram)</label><input type="tel" id="am-phone" placeholder="+7 (___) ___-__-__"></div>
+      <div class="fr"><div class="fld"><label>Имя (для отображения)</label><input type="text" id="am-name" placeholder="Имя"></div><div class="fld"><label>Специализация</label><input type="text" id="am-spec" placeholder="Нейл-мастер"></div></div>
+      <div class="fr"><div class="fld"><label>Начало работы</label><input type="time" id="am-open" value="09:00"></div><div class="fld"><label>Конец работы</label><input type="time" id="am-close" value="19:00"></div></div>
+    </div>
+    <button class="btn btn-acc" style="margin-top:16px" onclick="addMaster()">Добавить мастера</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-add-master')">Отмена</button>
+  </div>
+</div>
+
+<!-- BOOKING DETAIL -->
+<div class="modal" id="m-bk-detail">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Запись</div><div id="bkd-body"></div></div>
+</div>
+
+<!-- NOTIFS -->
+<div class="modal" id="m-notif">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Уведомления</div><div id="notif-list"></div></div>
+</div>
+
+<!-- SALON SETTINGS (owner) -->
+<div class="modal" id="m-salon-settings">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Настройки студии</div>
+    <div class="sec-lbl">Фото студии</div>
+    <div class="img-upload" id="salon-img-wrap">
+      <div id="salon-img-preview" style="font-size:50px;padding:16px">🏠</div>
+      <input type="file" accept="image/*" onchange="handleSalonImg(event)">
+      <div class="img-upload-hint">Рекомендуемый размер: 800×400 px (формат 2:1)<br>JPG или PNG, до 2 МБ</div>
+    </div>
+    <div class="fg" style="margin-top:16px">
+      <div class="fld"><label>Название студии</label><input type="text" id="ss-name"></div>
+      <div class="fld"><label>Адрес</label><input type="text" id="ss-addr" placeholder="ул. Примерная, д. 1"></div>
+      <div class="fld"><label>Контактный телефон</label><input type="tel" id="ss-phone"></div>
+      <div class="fld"><label>Instagram</label><input type="text" id="ss-ig" placeholder="@studio"></div>
+      <div class="fr"><div class="fld"><label>Открытие</label><input type="time" id="ss-open"></div><div class="fld"><label>Закрытие</label><input type="time" id="ss-close"></div></div>
+    </div>
+    <button class="btn btn-acc" style="margin-top:16px" onclick="saveSalonSettings()">Сохранить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-salon-settings')">Отмена</button>
+  </div>
+</div>
+
+<!-- ANALYTICS -->
+<div class="modal" id="m-analytics">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Аналитика</div><div id="analytics-body"></div></div>
+</div>
+
+<!-- CHANGE ROLE -->
+<div class="modal" id="m-change-role">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Сменить роль</div>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:20px;line-height:1.5">Вы можете переключаться между ролями в любое время. Все данные сохраняются.</p>
+    <div id="change-role-body"></div>
+  </div>
+</div>
+
+<!-- SUPPORT -->
+<div class="modal" id="m-support">
+  <div class="modal-sheet"><div class="modal-pill"></div><div class="modal-title">Поддержка</div>
+    <textarea style="width:100%;padding:12px 14px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);color:var(--text);font-family:'Manrope',sans-serif;font-size:14px;outline:none;resize:none;min-height:80px;line-height:1.5" id="sup-msg" placeholder="Опишите проблему..."></textarea>
+    <button class="btn btn-acc" style="margin-top:12px" onclick="sendSupport()">Отправить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-support')">Закрыть</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════
+// CONSTANTS
+// ════════════════════════════════════════
+const BTYPES=[
+  {id:'salon',icon:'💇‍♀️',name:'Салон красоты',desc:'Стрижки, окрашивание',cover:'linear-gradient(135deg,#7c3aed22,#c084fc22)',
+   services:[{name:'Женская стрижка',price:3500,dur:60,cat:'hair'},{name:'Мужская стрижка',price:2000,dur:45,cat:'hair'},{name:'Окрашивание',price:8000,dur:120,cat:'hair'},{name:'Укладка',price:2500,dur:45,cat:'hair'}]},
+  {id:'barber',icon:'🪒',name:'Барбершоп',desc:'Мужские стрижки, борода',cover:'linear-gradient(135deg,#0891b222,#2dd4bf22)',
+   services:[{name:'Мужская стрижка',price:2500,dur:40,cat:'barber'},{name:'Борода',price:1500,dur:30,cat:'barber'},{name:'Стрижка + борода',price:3500,dur:60,cat:'barber'},{name:'Детская стрижка',price:1800,dur:30,cat:'barber'}]},
+  {id:'nails',icon:'💅',name:'Нейл-студия',desc:'Маникюр, педикюр',cover:'linear-gradient(135deg,#e11d4822,#fb718522)',
+   services:[{name:'Маникюр',price:4000,dur:60,cat:'nails'},{name:'Педикюр',price:5000,dur:90,cat:'nails'},{name:'Гель-лак',price:2500,dur:45,cat:'nails'},{name:'Наращивание',price:7000,dur:120,cat:'nails'}]},
+  {id:'lashes',icon:'👁️',name:'Мастер ресниц',desc:'Ресницы, брови',cover:'linear-gradient(135deg,#d9770622,#fbbf2422)',
+   services:[{name:'Классика',price:5000,dur:90,cat:'brows'},{name:'Объём 2D-3D',price:6500,dur:120,cat:'brows'},{name:'Ламинирование',price:5500,dur:75,cat:'brows'},{name:'Брови',price:2500,dur:40,cat:'brows'}]},
+  {id:'cosmo',icon:'🌿',name:'Косметолог',desc:'Уход, пилинги',cover:'linear-gradient(135deg,#16a34a22,#4ade8022)',
+   services:[{name:'Консультация',price:2000,dur:30,cat:'skin'},{name:'УЗ чистка',price:6000,dur:60,cat:'skin'},{name:'Пилинг',price:5500,dur:60,cat:'skin'},{name:'Биоревитализация',price:12000,dur:60,cat:'skin'}]},
+  {id:'spa',icon:'💆',name:'Массаж / СПА',desc:'Расслабляющие процедуры',cover:'linear-gradient(135deg,#0e749422,#2dd4bf22)',
+   services:[{name:'Расслабляющий',price:5000,dur:60,cat:'massage'},{name:'Антицеллюлитный',price:5500,dur:60,cat:'massage'},{name:'Массаж головы',price:2500,dur:30,cat:'massage'},{name:'СПА',price:8000,dur:90,cat:'massage'}]},
+];
+const CAT_ICONS={hair:'✂️',nails:'💅',brows:'👁️',skin:'🌿',barber:'🪒',massage:'💆',other:'⭐'};
+const CAT_NAMES={hair:'Волосы',nails:'Ногти',brows:'Брови/Ресницы',skin:'Косметология',barber:'Барбер',massage:'Массаж',other:'Другое'};
+const STATUS_L={pending:'Ожидает',confirmed:'Подтверждено',done:'Завершено',cancelled:'Отменено',active:'В работе'};
+const STATUS_C={pending:'bd-wait',confirmed:'bd-conf',done:'bd-done',cancelled:'bd-canc',active:'bd-act'};
+const AV_COLS=['#a855f7','#2dd4bf','#fb7185','#fbbf24','#4ade80','#60a5fa'];
+const WD=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+const COUNTRIES={kz:['Рудный','Алматы','Астана','Шымкент','Костанай','Павлодар'],ru:['Москва','Санкт-Петербург','Екатеринбург'],by:['Минск','Гомель'],kg:['Бишкек','Ош']};
+const ROLE_META={client:{icon:'🌸',name:'Клиент',desc:'Записываться в салоны',cls:'rp-cli',avCls:'av-teal'},owner:{icon:'👑',name:'Владелец',desc:'Управлять своей студией',cls:'rp-own',avCls:'av-acc'},master:{icon:'✂️',name:'Мастер',desc:'Видеть свои записи',cls:'rp-mst',avCls:'av-amber'}};
+
+// ════════════════════════════════════════
+// STORAGE
+// ════════════════════════════════════════
+const ls={
+  get:k=>{try{return JSON.parse(localStorage.getItem('bp3_'+k))}catch{return null}},
+  set:(k,v)=>{try{localStorage.setItem('bp3_'+k,JSON.stringify(v))}catch{}},
+  del:k=>localStorage.removeItem('bp3_'+k)
+};
+
+// ════════════════════════════════════════
+// FIREBASE HELPERS
+// ════════════════════════════════════════
+let FB=null;
+let fbInited=false;
+
+function waitFb(){return new Promise(r=>{if(fbInited){r();return;}const h=()=>{fbInited=true;r();};window.addEventListener('fbReady',h,{once:true});if(window._fbReady!==undefined)h();});}
+
+async function fbGet(col,docId){
+  if(!FB)return ls.get(col+'_'+docId);
+  try{const d=await FB.getDoc(FB.doc(FB.db,col,docId));return d.exists()?d.data():null;}
+  catch(e){console.warn('fbGet',e.message);return null;}
+}
+async function fbSet(col,docId,data){
+  ls.set(col+'_'+docId,data);
+  if(!FB)return;
+  try{await FB.setDoc(FB.doc(FB.db,col,docId),data,{merge:true});}
+  catch(e){console.warn('fbSet',e.message);}
+}
+async function fbQuery(col,field,val){
+  if(!FB){// local fallback: scan all ls keys
+    const res=[];const prefix='bp3_'+col+'_';
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(prefix)){try{const d=JSON.parse(localStorage.getItem(k));if(d&&d[field]===val)res.push(d);}catch{}}}
+    return res;
+  }
+  try{const q=FB.query(FB.collection(FB.db,col),FB.where(field,'==',val));const snap=await FB.getDocs(q);return snap.docs.map(d=>d.data());}
+  catch(e){console.warn('fbQuery',e.message);return[];}
+}
+
+// ════════════════════════════════════════
+// TELEGRAM
+// ════════════════════════════════════════
+const tg=window.Telegram?.WebApp||{ready:()=>{},expand:()=>{},initDataUnsafe:{user:{id:Math.floor(Math.random()*999999)+1,first_name:'Тест',last_name:'Пользователь'}},HapticFeedback:{impactOccurred:()=>{}},showConfirm:(t,cb)=>cb(confirm(t))};
+tg.ready();tg.expand();
+
+// ════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════
+let UID=null;     // from URL or localStorage
+let USER=null;    // users/{uid}
+let LINK=null;    // user_links/{uid}
+let BIZ=null;     // salon data (owner)
+let BOOKINGS=[];  // local bookings
+let CLIENTS=[];   // local clients
+let SERVICES=[];  // local services
+let MASTERS=[];   // local masters
+let NOTIFS=[];
+let CLI_BKS=[];
+let CLI_SUBS=[];  // subscribed salon ids
+
+let selDate=todayStr();
+let selMasterF='all';
+let wizStep=1,wizData={};
+let cliWizStep=1,cliWizData={};
+let curSalonId=null;
+let curClientId=null;
+let selBtype='';
+let salonImgB64=null;
+
+// ════════════════════════════════════════
+// BOOT
+// ════════════════════════════════════════
+window.addEventListener('DOMContentLoaded',async()=>{
+  await waitFb();
+  if(window._fbReady&&window._FB){FB=window._FB;try{await FB.signInAnonymously(FB.auth);}catch(e){console.warn('auth',e.message);}}
+
+  // Check ?reset
+  const sp=new URLSearchParams(window.location.search);
+  if(sp.get('reset')==='1'){['uid','user','biz','bookings','clients','services','masters','cli_bks','cli_subs'].forEach(k=>ls.del(k));window.history.replaceState({},'','/');showToast('Данные очищены');}
+
+  // Get UID from URL
+  const urlUid=sp.get('uid');
+  if(urlUid){UID=urlUid;ls.set('uid',urlUid);window.history.replaceState({},'',window.location.pathname);}
+  else{UID=ls.get('uid');}
+
+  setTimeout(boot,2400);
+});
+
+async function boot(){
+  if(!UID){showOnboard('no-uid');return;}
+  // Load user_links for phone
+  LINK=await fbGet('user_links',UID)||ls.get('user_links_'+UID);
+  // Load user profile
+  USER=await fbGet('users',UID)||ls.get('users_'+UID);
+  if(!USER){showOnboard('new-user');return;}
+  initByRole(USER.role);
+}
+
+// ════════════════════════════════════════
+// ONBOARDING
+// ════════════════════════════════════════
+let obStep=1; // 1=profile, 2=role, 3=biz(owner only)
+let obRole='';
+let obBtype='';
+
+function showOnboard(reason){
+  const b=g('onboard-body');
+  if(reason==='no-uid'){
+    b.innerHTML=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px">
+      <div style="font-size:56px">🔗</div>
+      <div class="auth-title">Войдите через Telegram</div>
+      <div class="auth-sub">Откройте бота <b style="color:var(--acc)">@BeautyProBot</b> и нажмите /start, чтобы получить ссылку для входа</div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px;font-family:var(--mono);font-size:14px;color:var(--acc)">@BeautyProBot</div>
+    </div>`;
+    showScreen('s-onboard');return;
+  }
+  obStep=1;
+  renderObStep();
+  showScreen('s-onboard');
+}
+
+function renderObStep(){
+  const b=g('onboard-body');
+  if(obStep===1) b.innerHTML=renderObProfile();
+  else if(obStep===2) b.innerHTML=renderObRole();
+  else if(obStep===3) b.innerHTML=renderObBiz();
+}
+
+function renderObProfile(){
+  const tgU=tg.initDataUnsafe?.user;
+  const fname=tgU?.first_name||'';const lname=tgU?.last_name||'';
+  const phone=LINK?.phone?'+'+LINK.phone.replace(/^\+/,''):'';
+  return `<div class="auth-logo">✦</div>
+  <div class="auth-title">Добро пожаловать!</div>
+  <div class="auth-sub">Заполните данные для входа</div>
+  <div class="sec-lbl">Имя</div>
+  <div class="fg" style="margin-bottom:20px">
+    <div class="fr">
+      <div class="fld"><label>Имя</label><input type="text" id="ob-fname" value="${esc(fname)}" placeholder="Имя"></div>
+      <div class="fld"><label>Фамилия</label><input type="text" id="ob-lname" value="${esc(lname)}" placeholder="Фамилия"></div>
+    </div>
+    <div class="fld"><label>Телефон (привязан к Telegram)</label>
+      <div style="position:relative"><input type="tel" id="ob-phone" value="${esc(phone)}" readonly style="padding-right:40px"><span class="phone-lock">🔒</span></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:5px">Телефон привязан к вашему Telegram и не может быть изменён</div>
+    </div>
+    <div class="fld"><label>Страна</label>
+      <select id="ob-country" onchange="fillObCities()">
+        <option value="">Выберите страну</option>
+        <option value="kz">🇰🇿 Казахстан</option><option value="ru">🇷🇺 Россия</option>
+        <option value="by">🇧🇾 Беларусь</option><option value="kg">🇰🇬 Кыргызстан</option>
+      </select></div>
+    <div class="fld"><label>Город</label><select id="ob-city"><option value="">Сначала выберите страну</option></select></div>
+  </div>
+  <button class="btn btn-acc" onclick="obNext1()">Далее →</button>`;
+}
+
+function fillObCities(){
+  const co=g('ob-country')?.value;
+  const s=g('ob-city');if(!s)return;
+  s.innerHTML='<option value="">Выберите город</option>';
+  (COUNTRIES[co]||[]).forEach(c=>{const o=document.createElement('option');o.value=o.textContent=c;s.appendChild(o);});
+}
+
+function obNext1(){
+  const fname=g('ob-fname')?.value.trim();
+  const city=g('ob-city')?.value;
+  const country=g('ob-country')?.value;
+  if(!fname){showToast('Введите имя','e');return;}
+  if(!city){showToast('Выберите город','e');return;}
+  // Save partial
+  window._obData={fname,lname:g('ob-lname')?.value.trim()||'',country,city};
+  obStep=2;renderObStep();
+}
+
+function renderObRole(){
+  return `<button class="back-btn" onclick="obStep=1;renderObStep()" style="margin-bottom:20px">← Назад</button>
+  <div class="auth-title">Выберите роль</div>
+  <div class="auth-sub">Вы всегда сможете сменить роль в настройках профиля</div>
+  <div class="role-grid" id="ob-role-grid">
+    ${['client','owner','master'].map(r=>`<div class="role-card${obRole===r?' sel':''}" onclick="selObRole('${r}')">
+      <div class="rc-icon rc-${r==='client'?'cli':r==='owner'?'own':'mst'}">${ROLE_META[r].icon}</div>
+      <div class="rc-body"><div class="rc-name">${ROLE_META[r].name}</div><div class="rc-desc">${ROLE_META[r].desc}</div></div>
+    </div>`).join('')}
+  </div>
+  <button class="btn btn-acc" id="ob-role-btn" onclick="obNext2()" ${obRole?'':'disabled'} style="margin-top:8px">Далее →</button>`;
+}
+
+function selObRole(r){
+  obRole=r;
+  document.querySelectorAll('.role-card').forEach(c=>c.classList.toggle('sel',c.onclick?.toString().includes("'"+r+"'")));
+  g('ob-role-btn')?.removeAttribute('disabled');
+}
+
+function obNext2(){
+  if(!obRole){showToast('Выберите роль','e');return;}
+  if(obRole==='owner'){obStep=3;renderObStep();}
+  else finishOnboard();
+}
+
+function renderObBiz(){
+  return `<button class="back-btn" onclick="obStep=2;renderObStep()" style="margin-bottom:20px">← Назад</button>
+  <div class="auth-title">Данные студии</div>
+  <div class="auth-sub">Заполните информацию о вашем бизнесе</div>
+  <div class="sec-lbl">Тип бизнеса</div>
+  <div class="btype-grid" id="ob-btype-grid">
+    ${BTYPES.map(b=>`<div class="btype-card${obBtype===b.id?' sel':''}" onclick="selObBtype('${b.id}')"><div class="bt-icon">${b.icon}</div><div class="bt-name">${b.name}</div><div class="bt-desc">${b.desc}</div></div>`).join('')}
+  </div>
+  <div class="fg">
+    <div class="fld"><label>Название студии</label><input type="text" id="ob-bname" placeholder="Студия красоты «Аура»"></div>
+    <div class="fld"><label>Адрес студии</label><input type="text" id="ob-baddr" placeholder="ул. Примерная, д. 1"></div>
+    <div class="fld"><label>Контактный телефон</label><input type="tel" id="ob-bphone" placeholder="+7..."></div>
+    <div class="fld"><label>Instagram (необязательно)</label><input type="text" id="ob-big" placeholder="@studio"></div>
+    <div class="fr"><div class="fld"><label>Открытие</label><input type="time" id="ob-bopen" value="09:00"></div><div class="fld"><label>Закрытие</label><input type="time" id="ob-bclose" value="21:00"></div></div>
+  </div>
+  <button class="btn btn-acc" style="margin-top:16px" onclick="finishOnboard()">Начать работу →</button>`;
+}
+
+function selObBtype(id){
+  obBtype=id;
+  document.querySelectorAll('.btype-card').forEach(c=>c.classList.toggle('sel',c.onclick?.toString().includes("'"+id+"'")));
+}
+
+async function finishOnboard(){
+  const d=window._obData||{};
+  const tgU=tg.initDataUnsafe?.user;
+  const user={uid:UID,tgId:String(tgU?.id||''),name:(d.fname+' '+d.lname).trim(),firstName:d.fname||'',lastName:d.lname||'',phone:LINK?.phone||'',country:d.country||'',city:d.city||'',role:obRole,createdAt:new Date().toISOString()};
+  await fbSet('users',UID,user);
+  USER=user;
+  ls.set('users_'+UID,user);
+  if(obRole==='owner'){
+    if(!obBtype){showToast('Выберите тип бизнеса','e');return;}
+    const bt=BTYPES.find(b=>b.id===obBtype);
+    BIZ={id:UID+'_biz',ownerId:UID,bizType:obBtype,name:g('ob-bname')?.value.trim()||d.fname+"'s Studio",addr:g('ob-baddr')?.value.trim()||'',phone:g('ob-bphone')?.value.trim()||user.phone,instagram:g('ob-big')?.value.trim()||'',open:g('ob-bopen')?.value||'09:00',close:g('ob-bclose')?.value||'21:00',city:d.city,icon:bt.icon,typeName:bt.name,cover:bt.cover,img:null,createdAt:new Date().toISOString()};
+    SERVICES=bt.services.map((s,i)=>({...s,id:'s'+Date.now()+i,bizId:BIZ.id}));
+    MASTERS=[{id:'m0',bizId:BIZ.id,phone:user.phone,name:user.firstName,spec:bt.typeName,open:BIZ.open,close:BIZ.close,color:0,rating:5.0}];
+    await fbSet('salons',BIZ.id,BIZ);
+    await fbSet('salon_services',BIZ.id,{services:SERVICES});
+    await fbSet('salon_masters',BIZ.id,{masters:MASTERS});
+    ls.set('biz',BIZ);ls.set('services',SERVICES);ls.set('masters',MASTERS);
+    seedDemoData();
+  }
+  showToast('Добро пожаловать! 🎉','s');
+  tg.HapticFeedback.impactOccurred('heavy');
+  initByRole(obRole);
+}
+
+// ════════════════════════════════════════
+// ROLE INIT
+// ════════════════════════════════════════
+function initByRole(role){
+  USER.role=role;
+  loadLocalData();
+  if(role==='owner'){initOwner();}
+  else if(role==='client'){initClient();}
+  else if(role==='master'){initMaster();}
+}
+
+function loadLocalData(){
+  BIZ=ls.get('biz');
+  BOOKINGS=ls.get('bookings')||[];
+  CLIENTS=ls.get('clients')||[];
+  SERVICES=ls.get('services')||[];
+  MASTERS=ls.get('masters')||[];
+  NOTIFS=ls.get('notifs')||[];
+  CLI_BKS=ls.get('cli_bks')||[];
+  CLI_SUBS=ls.get('cli_subs')||[];
+}
+function saveData(){ls.set('biz',BIZ);ls.set('bookings',BOOKINGS);ls.set('clients',CLIENTS);ls.set('services',SERVICES);ls.set('masters',MASTERS);ls.set('notifs',NOTIFS);}
+function saveCliData(){ls.set('cli_bks',CLI_BKS);ls.set('cli_subs',CLI_SUBS);}
+
+// ════════════════════════════════════════
+// DEMO DATA SEED
+// ════════════════════════════════════════
+function seedDemoData(){
+  CLIENTS=[
+    {id:'c1',name:'Айгерим Сейткали',phone:'+7 701 234 5678',dob:'1995-03-15',note:'Аллергия на краску с аммонием',visits:5,totalSpent:24500,color:0,createdAt:new Date().toISOString()},
+    {id:'c2',name:'Дина Касымова',phone:'+7 707 876 5432',dob:'1990-07-22',note:'',visits:12,totalSpent:58000,color:1,createdAt:new Date().toISOString()},
+    {id:'c3',name:'Марат Нурланов',phone:'+7 778 111 2233',dob:'1988-11-05',note:'Предпочитает утренние часы',visits:3,totalSpent:7500,color:2,createdAt:new Date().toISOString()},
+  ];
+  const td=todayStr();
+  BOOKINGS=[
+    {id:'b1',clientId:'c1',clientName:'Айгерим Сейткали',serviceId:SERVICES[0]?.id,serviceName:SERVICES[0]?.name||'Услуга',price:SERVICES[0]?.price||3000,dur:SERVICES[0]?.dur||60,masterId:'m0',masterName:USER?.firstName||'Мастер',date:td,time:'10:00',status:'confirmed',note:'',bizId:BIZ?.id},
+    {id:'b2',clientId:'c2',clientName:'Дина Касымова',serviceId:SERVICES[1]?.id,serviceName:SERVICES[1]?.name||'Услуга',price:SERVICES[1]?.price||2000,dur:SERVICES[1]?.dur||45,masterId:'m0',masterName:USER?.firstName||'Мастер',date:td,time:'12:00',status:'pending',note:'',bizId:BIZ?.id},
+    {id:'b3',clientId:'c3',clientName:'Марат Нурланов',serviceId:SERVICES[2]?.id,serviceName:SERVICES[2]?.name||'Услуга',price:SERVICES[2]?.price||4000,dur:SERVICES[2]?.dur||75,masterId:'m0',masterName:USER?.firstName||'Мастер',date:td,time:'14:30',status:'done',note:'',bizId:BIZ?.id},
+  ];
+  ls.set('clients',CLIENTS);ls.set('bookings',BOOKINGS);
+}
+
+// ════════════════════════════════════════
+// OWNER MODE
+// ════════════════════════════════════════
+function initOwner(){
+  renderDash();renderSched();renderClientList();renderSvcs();renderOwnerProf();
+  showScreen('s-dash');
+}
+
+const A_TABS={dash:'s-dash',sched:'s-sched',clients:'s-clients',svcs:'s-svcs',prof:'s-prof'};
+let curATab='dash';
+function aTab(tab){
+  curATab=tab;
+  Object.entries(A_TABS).forEach(([k,v])=>g(v)?.classList.toggle('active',k===tab));
+  document.querySelectorAll('#s-dash .ni,#s-sched .ni,#s-clients .ni,#s-svcs .ni').forEach(ni=>ni.classList.remove('on'));
+  document.querySelectorAll(`[id="ani-${tab}"]`).forEach(ni=>ni.classList.add('on'));
+  if(tab==='dash')renderDash();
+  else if(tab==='sched')renderSched();
+  else if(tab==='clients')renderClientList();
+  else if(tab==='svcs')renderSvcs();
+  else if(tab==='prof'){renderOwnerProf();showScreen('s-prof');}
+  tg.HapticFeedback.impactOccurred('light');
+}
+
+function renderDash(){
+  if(!BIZ)return;
+  g('dsh-n').textContent=BIZ.name||USER?.firstName||'—';
+  g('dsh-av').textContent=(BIZ.name||'A')[0];
+  renderCalStrip('a-cal',false);
+  const tod=BOOKINGS.filter(b=>b.date===selDate);
+  const rev=tod.filter(b=>b.status==='done').reduce((s,b)=>s+b.price,0);
+  const pend=BOOKINGS.filter(b=>b.status==='pending').length;
+  g('sa-appts').textContent=tod.length;g('sa-rev').textContent=fm(rev)+'₸';
+  g('sa-pend').textContent=pend;g('sa-clients').textContent=CLIENTS.length;
+  g('notif-dot').style.display=pend>0?'block':'none';
+  g('apip-s')?.classList.toggle('vis',pend>0);
+  const tl=g('a-today');
+  tl.innerHTML=tod.length?tod.sort((a,b)=>a.time.localeCompare(b.time)).map(b=>apptCard(b)).join(''):'<div class="empty"><div class="empty-ico">📅</div><div class="empty-txt">Записей на этот день нет</div></div>';
+}
+
+function apptCard(b,showSalon=false){
+  const[h,m]=b.time.split(':').map(Number);const em=h*60+m+b.dur;
+  const eh=String(Math.floor(em/60)).padStart(2,'0');const emm=String(em%60).padStart(2,'0');
+  return `<div class="appt-slot" onclick="openBkDetail('${b.id}')">
+    <div class="appt-time"><div class="appt-t1">${b.time}</div><div class="appt-t2">${eh}:${emm}</div></div>
+    <div class="appt-div"></div>
+    <div class="appt-info">
+      <div class="appt-client">${esc(b.clientName)}</div>
+      <div class="appt-svc">${esc(b.serviceName)}</div>
+      <div class="appt-meta">
+        <span class="badge ${STATUS_C[b.status]||'bd-wait'}">${b.status==='pending'?'<span class="dot-p"></span>':''}${STATUS_L[b.status]||b.status}</span>
+        ${showSalon&&b.salonName?`<span class="salon-tag">${esc(b.salonName)}</span>`:`<span style="font-size:11px;color:var(--text3)">${esc(b.masterName||'')}</span>`}
+      </div>
+    </div>
+    <div class="appt-r"><div class="appt-price">${fm(b.price)}₸</div><div class="appt-dur">${b.dur}мин</div></div>
+  </div>`;
+}
+
+// CALENDAR
+function renderCalStrip(elId,cli=false,amber=false){
+  const el=g(elId);if(!el)return;
+  const today=new Date();const days=[];
+  for(let i=-2;i<=14;i++){const d=new Date(today);d.setDate(today.getDate()+i);days.push(d);}
+  el.innerHTML=days.map(d=>{
+    const ds=dateStr(d);const hasA=BOOKINGS.some(b=>b.date===ds);
+    const isTd=ds===todayStr();const isSel=ds===selDate;
+    return `<div class="cal-day${isSel?' on':''}${isTd?' today':''}${hasA?' has-appt':''}" onclick="selDateFn('${ds}','${elId}')">
+      <div class="cal-wd">${WD[d.getDay()]}</div><div class="cal-d">${d.getDate()}</div><div class="cal-pip"></div>
+    </div>`;
+  }).join('');
+  setTimeout(()=>el.querySelector('.today')?.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'}),80);
+}
+function selDateFn(ds,calId){selDate=ds;renderCalStrip(calId);if(calId==='a-cal')renderDash();else if(calId==='a-cal2')renderSchedList();else if(calId==='m-cal')renderMasterSched();tg.HapticFeedback.impactOccurred('light');}
+
+// SCHEDULE
+function renderSched(){renderCalStrip('a-cal2');renderMasterFilter();renderSchedList();}
+function renderMasterFilter(){
+  const el=g('a-mf');if(!el)return;
+  el.innerHTML=`<div class="chip${selMasterF==='all'?' on':''}" onclick="selMF('all')">Все</div>`+MASTERS.map(m=>`<div class="chip${selMasterF===m.id?' on':''}" onclick="selMF('${m.id}')">${m.name}</div>`).join('');
+}
+function selMF(id){selMasterF=id;renderMasterFilter();renderSchedList();}
+function renderSchedList(){
+  const el=g('a-sched-list');if(!el)return;
+  let list=BOOKINGS.filter(b=>b.date===selDate);
+  if(selMasterF!=='all')list=list.filter(b=>b.masterId===selMasterF);
+  list.sort((a,b)=>a.time.localeCompare(b.time));
+  el.innerHTML=list.length?list.map(b=>apptCard(b)).join(''):'<div class="empty"><div class="empty-ico">📆</div><div class="empty-txt">Нет записей на этот день</div></div>';
+}
+
+// CLIENTS
+function renderClientList(){filterClients('');}
+function filterClients(q){
+  const el=g('a-client-list');if(!el)return;
+  const f=q?CLIENTS.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())||c.phone.includes(q)):CLIENTS;
+  if(!f.length){el.innerHTML='<div class="empty"><div class="empty-ico">👥</div><div class="empty-txt">Клиентов пока нет</div></div>';return;}
+  el.innerHTML=f.map(c=>{
+    const col=AV_COLS[c.color%AV_COLS.length];
+    const last=BOOKINGS.filter(b=>b.clientId===c.id&&b.status==='done').sort((a,b)=>b.date.localeCompare(a.date))[0];
+    return `<div class="client-row" onclick="openClientDetail('${c.id}')">
+      <div class="master-av" style="background:${col};width:44px;height:44px;font-size:16px">${(c.name||'?')[0]}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;margin-bottom:3px">${esc(c.name)}</div><div style="font-size:12px;color:var(--text2)">${esc(c.phone)} · ${c.visits||0} визитов</div></div>
+      <div style="text-align:right;flex-shrink:0"><div style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--acc)">${fm(c.totalSpent||0)}₸</div><div style="font-size:11px;color:var(--text3)">${last?last.date:'—'}</div></div>
+    </div>`;
+  }).join('');
+}
+function openClientDetail(id){
+  curClientId=id;const c=CLIENTS.find(x=>x.id===id);if(!c)return;
+  const col=AV_COLS[c.color%AV_COLS.length];
+  const cBks=BOOKINGS.filter(b=>b.clientId===id).sort((a,b)=>b.date.localeCompare(a.date));
+  g('cd-name').textContent=c.name;
+  g('cd-body').innerHTML=`<div style="padding:16px 20px">
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:20px">
+      <div class="prof-av" style="background:${col};width:58px;height:58px;font-size:22px">${c.name[0]}</div>
+      <div><div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600">${esc(c.name)}</div><div style="font-size:13px;color:var(--teal);margin-top:3px">${esc(c.phone)}</div>${c.dob?`<div style="font-size:12px;color:var(--text2);margin-top:2px">ДР: ${c.dob}</div>`:''}</div>
+    </div>
+    <div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-card s-acc"><div class="stat-lbl">Визитов</div><div class="stat-v">${c.visits||0}</div></div>
+      <div class="stat-card s-teal"><div class="stat-lbl">Потрачено</div><div class="stat-v">${fm(c.totalSpent||0)}₸</div></div>
+    </div>
+    ${c.note?`<div style="background:var(--amber2);border:1px solid rgba(251,191,36,.22);border-radius:var(--r);padding:12px;margin-bottom:16px;font-size:13px;color:var(--amber)">📝 ${esc(c.note)}</div>`:''}
+    <div class="sec-hdr"><div class="sec-t">История визитов</div></div>
+    ${cBks.length?cBks.map(b=>`<div class="appt-slot" style="margin-bottom:8px">
+      <div class="appt-time"><div class="appt-t1">${b.time}</div><div class="appt-t2">${b.date}</div></div>
+      <div class="appt-div"></div>
+      <div class="appt-info"><div class="appt-client">${esc(b.serviceName)}</div><div class="appt-svc">${esc(b.masterName||'')}</div></div>
+      <div class="appt-r"><div class="appt-price">${fm(b.price)}₸</div><span class="badge ${STATUS_C[b.status]||'bd-wait'}" style="font-size:10px">${STATUS_L[b.status]||b.status}</span></div>
+    </div>`).join(''):'<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">История пуста</div></div>'}
+  </div>`;
+  showScreen('s-client-detail');
+}
+function addClient(){
+  const name=g('ac-name')?.value.trim();const phone=g('ac-phone')?.value.trim();
+  if(!name||!phone){showToast('Введите имя и телефон','e');return;}
+  CLIENTS.push({id:'c'+Date.now(),name:name+(g('ac-sname')?.value.trim()?' '+g('ac-sname').value.trim():''),phone,dob:g('ac-dob')?.value||'',note:g('ac-note')?.value.trim()||'',visits:0,totalSpent:0,color:CLIENTS.length%AV_COLS.length,createdAt:new Date().toISOString()});
+  saveData();closeModal('m-add-client');['ac-name','ac-sname','ac-phone','ac-dob','ac-note'].forEach(id=>{const el=g(id);if(el)el.value='';});
+  showToast('Клиент добавлен','s');renderClientList();renderDash();
+}
+
+// SERVICES & MASTERS
+function renderSvcs(){renderSvcList();renderMastersList();}
+function renderSvcList(){
+  const el=g('a-svc-list');if(!el)return;
+  if(!SERVICES.length){el.innerHTML='<div class="empty"><div class="empty-ico">💎</div><div class="empty-txt">Услуг пока нет</div></div>';return;}
+  const grp={};SERVICES.forEach(s=>{if(!grp[s.cat])grp[s.cat]=[];grp[s.cat].push(s);});
+  el.innerHTML=Object.entries(grp).map(([cat,svcs])=>`
+    <div class="sec-hdr" style="margin-top:14px"><div class="sec-t">${CAT_ICONS[cat]||'⭐'} ${CAT_NAMES[cat]||cat}</div></div>
+    ${svcs.map(s=>`<div class="svc-item">
+      <div class="svc-ico">${CAT_ICONS[s.cat]||'⭐'}</div>
+      <div class="svc-info"><div class="svc-name">${esc(s.name)}</div><div class="svc-dur">${s.dur} мин</div></div>
+      <div class="svc-price">${fm(s.price)}₸</div>
+      <button class="btn btn-ghost btn-sm" style="width:34px;height:34px;padding:0;border-radius:50%" onclick="delSvc('${s.id}')">🗑</button>
+    </div>`).join('')}`).join('');
+}
+function renderMastersList(){
+  const el=g('a-masters-list');if(!el)return;
+  if(!MASTERS.length){el.innerHTML='<div class="empty"><div class="empty-ico">👩‍💼</div><div class="empty-txt">Мастеров нет</div></div>';return;}
+  el.innerHTML=MASTERS.map(m=>{
+    const mb=BOOKINGS.filter(b=>b.masterId===m.id&&b.status==='done');
+    return `<div class="master-card">
+      <div class="master-av" style="background:${AV_COLS[m.color%AV_COLS.length]}">${(m.name||'?')[0]}</div>
+      <div class="master-info"><div class="master-name">${esc(m.name)}</div><div class="master-spec">${esc(m.spec||'')}</div>
+        <div class="master-stats"><span class="master-stat">📅 <b>${mb.length}</b></span><span class="master-stat">⭐ <b>${(m.rating||5).toFixed(1)}</b></span><span class="master-stat" style="font-family:var(--mono)">🕐 ${m.open||'09:00'}–${m.close||'19:00'}</span><span class="master-stat" style="font-family:var(--mono);color:var(--teal)">${esc(m.phone||'')}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function svcsTab(tab){
+  g('svcs-panel').style.display=tab==='s'?'':'none';g('masters-panel').style.display=tab==='m'?'':'none';
+  g('svctab-s').classList.toggle('on',tab==='s');g('svctab-m').classList.toggle('on',tab==='m');
+}
+function addService(){
+  const name=g('as-name')?.value.trim();const price=parseInt(g('as-price')?.value);const dur=parseInt(g('as-dur')?.value);
+  if(!name||!price||!dur){showToast('Заполните все поля','e');return;}
+  SERVICES.push({id:'s'+Date.now(),name,price,dur,cat:g('as-cat')?.value||'other',bizId:BIZ?.id});
+  saveData();closeModal('m-add-svc');showToast('Услуга добавлена','s');renderSvcList();
+}
+function delSvc(id){SERVICES=SERVICES.filter(s=>s.id!==id);saveData();renderSvcList();showToast('Удалено');}
+function addMaster(){
+  const phone=g('am-phone')?.value.trim();const name=g('am-name')?.value.trim();
+  if(!phone||!name){showToast('Укажите телефон и имя','e');return;}
+  MASTERS.push({id:'m'+Date.now(),bizId:BIZ?.id,phone,name,spec:g('am-spec')?.value.trim()||'',open:g('am-open')?.value||'09:00',close:g('am-close')?.value||'19:00',color:MASTERS.length%AV_COLS.length,rating:5.0});
+  saveData();closeModal('m-add-master');showToast('Мастер добавлен','s');renderMastersList();
+}
+
+// OWNER PROFILE
+function renderOwnerProf(){
+  const b=g('prof-body');if(!b)return;
+  const rm=ROLE_META['owner'];
+  b.innerHTML=`<div style="padding:0 0 16px">
+    <div class="prof-banner acc" style="margin-bottom:16px">
+      <div class="prof-av av-acc" style="font-size:20px">${(BIZ?.name||'A')[0]}</div>
+      <div><div class="prof-n">${esc(BIZ?.name||USER?.firstName||'—')}</div>
+        <div class="prof-role" style="color:var(--acc)">👑 ${esc(BIZ?.typeName||'')} · Владелец</div>
+        <div class="prof-meta">📍 ${esc(USER?.city||'')}${BIZ?.addr?' · '+esc(BIZ.addr):''}</div>
+        ${BIZ?.phone?`<div class="prof-meta">📞 ${esc(BIZ.phone)}</div>`:''}
+        ${BIZ?.instagram?`<div class="prof-meta">📷 ${esc(BIZ.instagram)}</div>`:''}
+      </div>
+    </div>
+    <div class="sec-lbl">Управление</div>
+    <div class="menu-list">
+      <button class="menu-item" onclick="openSalonSettings()"><div class="menu-ico mi-a">🏢</div><span class="menu-txt">Настройки студии</span><span class="menu-arr">›</span></button>
+      <button class="menu-item" onclick="openModal('m-analytics')"><div class="menu-ico mi-t">📊</div><span class="menu-txt">Аналитика</span><span class="menu-arr">›</span></button>
+      <button class="menu-item" onclick="shareLink()"><div class="menu-ico mi-b">🔗</div><span class="menu-txt">Ссылка для клиентов</span><span class="menu-arr">›</span></button>
+    </div>
+    <div class="sec-lbl">Аккаунт</div>
+    <div class="menu-list">
+      <button class="menu-item" onclick="openChangeRole()"><div class="menu-ico mi-bl">⇄</div><span class="menu-txt">Сменить роль</span><span class="menu-val">${rm.name}</span><span class="menu-arr">›</span></button>
+      <button class="menu-item" onclick="openModal('m-support')"><div class="menu-ico mi-r">💬</div><span class="menu-txt">Поддержка</span><span class="menu-arr">›</span></button>
+    </div>
+    <button class="btn btn-ghost" style="margin-top:4px" onclick="confirmReset()">Сбросить данные</button>
+  </div>`;
+  // Prof bnav
+  g('prof-bnav').innerHTML=`
+    <button class="ni" onclick="aTab('dash');showScreen('s-dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
+    <button class="ni" onclick="aTab('sched');showScreen('s-sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span></button>
+    <button class="ni" onclick="aTab('clients');showScreen('s-clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
+    <button class="ni" onclick="aTab('svcs');showScreen('s-svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni on" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>`;
+  showScreen('s-prof');
+}
+function openSalonSettings(){
+  if(BIZ){g('ss-name').value=BIZ.name||'';g('ss-addr').value=BIZ.addr||'';g('ss-phone').value=BIZ.phone||'';g('ss-ig').value=BIZ.instagram||'';g('ss-open').value=BIZ.open||'09:00';g('ss-close').value=BIZ.close||'21:00';}
+  openModal('m-salon-settings');
+}
+function handleSalonImg(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=ev=>{salonImgB64=ev.target.result;const p=g('salon-img-preview');p.innerHTML=`<img src="${salonImgB64}">`;};
+  r.readAsDataURL(file);
+}
+function saveSalonSettings(){
+  if(!BIZ)return;
+  BIZ.name=g('ss-name').value.trim()||BIZ.name;BIZ.addr=g('ss-addr').value.trim();BIZ.phone=g('ss-phone').value.trim();
+  BIZ.instagram=g('ss-ig').value.trim();BIZ.open=g('ss-open').value;BIZ.close=g('ss-close').value;
+  if(salonImgB64)BIZ.img=salonImgB64;
+  saveData();closeModal('m-salon-settings');showToast('Настройки сохранены','s');renderOwnerProf();
+}
+
+// BOOKING WIZARD (owner)
+function openNewBooking(clientId=null){
+  wizStep=1;wizData={clientId:clientId||null,clientName:clientId?(CLIENTS.find(c=>c.id===clientId)?.name||''):'',serviceId:null,serviceName:'',price:0,dur:60,masterId:MASTERS[0]?.id||null,masterName:MASTERS[0]?.name||'',date:selDate,time:'',note:''};
+  if(clientId)wizStep=2;
+  renderWiz();openModal('m-new-booking');
+}
+function renderWiz(){
+  ['ws1','ws2','ws3','ws4'].forEach((id,i)=>{const el=g(id);if(el)el.className='wiz-step '+(i+1<wizStep?'done':i+1===wizStep?'active':'');});
+  const b=g('wiz-body');if(!b)return;
+  b.innerHTML=wizStep===1?wiz1():wizStep===2?wiz2():wizStep===3?wiz3():wiz4();
+}
+function wiz1(){
+  const list=CLIENTS.slice(0,8);
+  return `<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px">Шаг 1 · Клиент</div>
+  <div class="search-wrap"><span class="search-ico">🔍</span><input class="search-inp" type="text" placeholder="Поиск..." oninput="filterWizCli(this.value)" id="wiz-s"></div>
+  <div id="wiz-cli">${wizCliHtml(list)}</div>
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px"><button class="btn btn-out" onclick="closeModal('m-new-booking');openModal('m-add-client')">+ Новый клиент</button></div>`;
+}
+function wizCliHtml(list){
+  return list.map(c=>`<div class="client-row" style="margin-bottom:6px${wizData.clientId===c.id?';border-color:var(--acc);background:var(--acc3)':''}" onclick="selWizCli('${c.id}','${esc(c.name)}')">
+    <div class="master-av" style="background:${AV_COLS[c.color%AV_COLS.length]};width:36px;height:36px;font-size:13px">${c.name[0]}</div>
+    <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">${esc(c.name)}</div><div style="font-size:11px;color:var(--text2)">${esc(c.phone)}</div></div>
+    ${wizData.clientId===c.id?'<span style="color:var(--acc);font-size:18px">✓</span>':''}
+  </div>`).join('');
+}
+function filterWizCli(q){const el=g('wiz-cli');if(el)el.innerHTML=wizCliHtml(q?CLIENTS.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())||c.phone.includes(q)):CLIENTS.slice(0,8));}
+function selWizCli(id,name){wizData.clientId=id;wizData.clientName=name;tg.HapticFeedback.impactOccurred('light');wizStep=2;renderWiz();}
+function wiz2(){
+  return `<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Шаг 2 · Услуга</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Клиент: <b style="color:var(--text)">${esc(wizData.clientName)}</b></div>
+  ${SERVICES.map(s=>`<div class="svc-item svc-book" style="margin-bottom:8px;${wizData.serviceId===s.id?'border-color:var(--acc);background:var(--acc3)':''}" onclick="selWizSvc('${s.id}','${esc(s.name)}',${s.price},${s.dur})">
+    <div class="svc-ico">${CAT_ICONS[s.cat]||'⭐'}</div>
+    <div class="svc-info"><div class="svc-name">${esc(s.name)}</div><div class="svc-dur">${s.dur} мин</div></div>
+    <div class="svc-price">${fm(s.price)}₸</div>${wizData.serviceId===s.id?'<span style="color:var(--acc);font-size:18px;margin-left:4px">✓</span>':''}
+  </div>`).join('')}
+  <button class="btn btn-ghost" style="margin-top:8px" onclick="wizStep=1;renderWiz()">← Назад</button>`;
+}
+function selWizSvc(id,name,price,dur){wizData.serviceId=id;wizData.serviceName=name;wizData.price=price;wizData.dur=dur;tg.HapticFeedback.impactOccurred('light');wizStep=3;renderWiz();}
+function wiz3(){
+  const slots=genSlots(BIZ?.open||'09:00',BIZ?.close||'21:00');
+  return `<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Шаг 3 · Дата и время</div>
+  <div class="cal-strip" id="wiz-cal" style="margin-bottom:12px"></div>
+  <div class="time-grid">${slots.map(t=>{const busy=BOOKINGS.some(b=>b.date===wizData.date&&b.time===t&&b.masterId===wizData.masterId);return `<div class="ts${wizData.time===t?' on':''}${busy?' busy':''}" onclick="${busy?'':("selWizTime('"+t+"')")}">${t}</div>`;}).join('')}</div>
+  <div class="fld"><label>Мастер</label><select onchange="selWizMaster(this.value)">${MASTERS.map(m=>`<option value="${m.id}" ${wizData.masterId===m.id?'selected':''}>${m.name}</option>`).join('')}</select></div>
+  <button class="btn btn-ghost" style="margin-top:10px" onclick="wizStep=2;renderWiz()">← Назад</button>`;
+}
+function selWizTime(t){wizData.time=t;tg.HapticFeedback.impactOccurred('light');wizStep=4;renderWiz();}
+function selWizMaster(id){const m=MASTERS.find(x=>x.id===id);wizData.masterId=id;wizData.masterName=m?.name||'';}
+function wiz4(){
+  return `<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Шаг 4 · Подтверждение</div>
+  <div class="bconf">
+    <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Клиент</div><div class="bc-val">${esc(wizData.clientName)}</div></div></div>
+    <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(wizData.serviceName)}</div></div></div>
+    <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val" style="font-family:var(--mono)">${wizData.date} · ${wizData.time}</div></div></div>
+    <div class="bc-row"><div class="bc-ico">👩‍💼</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">${esc(wizData.masterName)}</div></div></div>
+    <div class="bc-row" style="border-bottom:none"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val" style="font-family:var(--mono);font-size:18px;color:var(--acc)">${fm(wizData.price)}₸</div></div></div>
+  </div>
+  <div class="fld" style="margin-bottom:16px"><label>Комментарий</label><textarea id="wiz-note" placeholder="Пожелания..."></textarea></div>
+  <button class="btn btn-acc" onclick="confirmBooking()">✓ Создать запись</button>
+  <button class="btn btn-ghost" style="margin-top:8px" onclick="wizStep=3;renderWiz()">← Назад</button>`;
+}
+function confirmBooking(){
+  if(!wizData.clientId||!wizData.serviceId||!wizData.time){showToast('Заполните все данные','e');return;}
+  const id='b'+Date.now();
+  BOOKINGS.push({id,clientId:wizData.clientId,clientName:wizData.clientName,serviceId:wizData.serviceId,serviceName:wizData.serviceName,price:wizData.price,dur:wizData.dur,masterId:wizData.masterId,masterName:wizData.masterName,date:wizData.date,time:wizData.time,status:'confirmed',note:g('wiz-note')?.value||'',bizId:BIZ?.id,salonName:BIZ?.name,createdAt:new Date().toISOString()});
+  NOTIFS.push({id:'n'+Date.now(),text:`Запись: ${wizData.clientName} — ${wizData.serviceName} ${wizData.time}`});
+  saveData();closeModal('m-new-booking');showToast('✅ Запись создана!','s');tg.HapticFeedback.impactOccurred('heavy');renderDash();renderSched();
+}
+
+// BOOKING DETAIL
+function openBkDetail(id){
+  const b=BOOKINGS.find(x=>x.id===id);if(!b)return;
+  g('bkd-body').innerHTML=`
+    <div class="bconf">
+      <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Клиент</div><div class="bc-val">${esc(b.clientName)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(b.serviceName)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val" style="font-family:var(--mono)">${b.date} · ${b.time}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">👩‍💼</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">${esc(b.masterName||'')}</div></div></div>
+      <div class="bc-row" style="border-bottom:none"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val" style="font-family:var(--mono);font-size:18px;color:var(--acc)">${fm(b.price)}₸</div></div></div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px"><span style="color:var(--text2);font-size:14px">Статус:</span><span class="badge ${STATUS_C[b.status]||'bd-wait'}">${STATUS_L[b.status]||b.status}</span></div>
+    ${b.note?`<div style="background:var(--amber2);border:1px solid rgba(251,191,36,.2);border-radius:var(--r);padding:12px;margin-bottom:16px;font-size:13px;color:var(--amber)">💬 ${esc(b.note)}</div>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${b.status==='pending'?`<button class="btn btn-green btn-sm" onclick="chgBkStatus('${b.id}','confirmed')">✓ Подтвердить</button>`:''}
+      ${b.status==='confirmed'?`<button class="btn btn-blue btn-sm" onclick="chgBkStatus('${b.id}','active')">▶ В работе</button>`:''}
+      ${b.status==='active'?`<button class="btn btn-acc btn-sm" onclick="chgBkStatus('${b.id}','done')">✓ Завершить</button>`:''}
+      ${b.status!=='done'&&b.status!=='cancelled'?`<button class="btn btn-rose btn-sm" onclick="chgBkStatus('${b.id}','cancelled')">✗ Отменить</button>`:''}
+    </div>`;
+  openModal('m-bk-detail');
+}
+function chgBkStatus(id,status){
+  const idx=BOOKINGS.findIndex(b=>b.id===id);if(idx<0)return;
+  BOOKINGS[idx].status=status;
+  if(status==='done'){const c=CLIENTS.find(x=>x.id===BOOKINGS[idx].clientId);if(c){c.visits=(c.visits||0)+1;c.totalSpent=(c.totalSpent||0)+BOOKINGS[idx].price;}}
+  saveData();closeModal('m-bk-detail');showToast('Статус обновлён','s');renderDash();renderSched();
+}
+
+// ANALYTICS
+function renderAnalytics(){
+  const el=g('analytics-body');if(!el)return;
+  const done=BOOKINGS.filter(b=>b.status==='done');
+  const totalRev=done.reduce((s,b)=>s+b.price,0);
+  const topSvc={};done.forEach(b=>{topSvc[b.serviceName]=(topSvc[b.serviceName]||0)+1;});
+  const topList=Object.entries(topSvc).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  el.innerHTML=`<div class="stat-grid">
+    <div class="stat-card s-acc"><div class="stat-lbl">Записей</div><div class="stat-v">${BOOKINGS.length}</div></div>
+    <div class="stat-card s-teal"><div class="stat-lbl">Выручка</div><div class="stat-v">${fm(totalRev)}₸</div></div>
+    <div class="stat-card s-amber"><div class="stat-lbl">Завершено</div><div class="stat-v">${done.length}</div></div>
+    <div class="stat-card s-rose"><div class="stat-lbl">Клиентов</div><div class="stat-v">${CLIENTS.length}</div></div>
+  </div>
+  <div class="sec-hdr"><div class="sec-t">Топ услуг</div></div>
+  ${topList.map(([nm,cnt])=>`<div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)"><div style="flex:1;font-size:14px">${esc(nm)}</div><div style="font-family:var(--mono);font-size:13px;color:var(--text2)">${cnt}×</div></div>`).join('')||'<div class="empty"><div class="empty-txt">Нет данных</div></div>'}`;
+}
+function renderNotifs(){
+  const el=g('notif-list');if(!el)return;
+  const pend=BOOKINGS.filter(b=>b.status==='pending');
+  if(!pend.length&&!NOTIFS.length){el.innerHTML='<div class="empty"><div class="empty-ico">🔔</div><div class="empty-txt">Уведомлений нет</div></div>';return;}
+  el.innerHTML=pend.map(b=>`<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal('m-notif');openBkDetail('${b.id}')">
+    <span style="font-size:20px">⏳</span>
+    <div><div style="font-size:14px;font-weight:600;margin-bottom:3px">${esc(b.clientName)}</div><div style="font-size:12px;color:var(--text2)">${esc(b.serviceName)} · ${b.time}</div></div>
+  </div>`).join('')+NOTIFS.slice(-5).reverse().map(n=>`<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🔔</span><span style="font-size:13px;color:var(--text2);line-height:1.5">${esc(n.text)}</span></div>`).join('');
+}
+
+// ════════════════════════════════════════
+// CLIENT MODE
+// ════════════════════════════════════════
+let cliCatF='my'; // default to "Мои"
+function initClient(){
+  g('cli-av').textContent=(USER?.firstName||'К')[0];
+  renderCatFilters();renderSalonList('');renderCliMyBks();renderCliProf();
+  showScreen('s-catalog');
+}
+
+const CAT_FILTER_ITEMS=[
+  {id:'my',icon:'💜',name:'Мои'},
+  {id:'all',icon:'✨',name:'Все'},
+  {id:'salon',icon:'💇‍♀️',name:'Салоны'},
+  {id:'barber',icon:'🪒',name:'Барбер'},
+  {id:'nails',icon:'💅',name:'Ногти'},
+  {id:'lashes',icon:'👁️',name:'Ресницы'},
+  {id:'cosmo',icon:'🌿',name:'Косметолог'},
+  {id:'spa',icon:'💆',name:'СПА'},
+];
+function renderCatFilters(){
+  const el=g('c-cat-filter');if(!el)return;
+  el.innerHTML=CAT_FILTER_ITEMS.map(c=>`<div class="chip${cliCatF===c.id?' on-teal':''}" onclick="selCliCat('${c.id}')">${c.icon} ${c.name}</div>`).join('');
+}
+function selCliCat(id){cliCatF=id;renderCatFilters();renderSalonList(g('s-search')?.value||'');}
+function filterSalons(q){renderSalonList(q);}
+
+function getAllSalons(){
+  // Real salon from owner's data (if any is stored locally)
+  const real=BIZ?[{...BIZ,salonId:BIZ.id,bizType:BIZ.bizType,services:SERVICES,masters:MASTERS,bookings:BOOKINGS,_real:true}]:[];
+  const demos=[
+    {salonId:'d1',bizType:'salon',name:'Beauty House',city:USER?.city||'Алматы',addr:'ул. Абая, 45',icon:'💇‍♀️',typeName:'Салон красоты',open:'09:00',close:'20:00',cover:'linear-gradient(135deg,#7c3aed22,#c084fc22)',img:null,rating:4.8,phone:'+7 701 111 2222',instagram:'@beautyhouse_kz',services:BTYPES[0].services.map((s,i)=>({...s,id:'d1s'+i})),masters:[{id:'d1m1',name:'Камила',spec:'Стилист',open:'09:00',close:'20:00',color:0,phone:''}],bookings:[]},
+    {salonId:'d2',bizType:'barber',name:'Kings Barber',city:USER?.city||'Алматы',addr:'пр. Назарбаева, 12',icon:'🪒',typeName:'Барбершоп',open:'10:00',close:'21:00',cover:'linear-gradient(135deg,#0891b222,#2dd4bf22)',img:null,rating:4.9,phone:'+7 777 333 4444',instagram:'@kingsbarber',services:BTYPES[1].services.map((s,i)=>({...s,id:'d2s'+i})),masters:[{id:'d2m1',name:'Айдос',spec:'Барбер',open:'10:00',close:'21:00',color:1,phone:''},{id:'d2m2',name:'Руслан',spec:'Барбер',open:'10:00',close:'21:00',color:2,phone:''}],bookings:[]},
+    {salonId:'d3',bizType:'nails',name:'Nail Art Studio',city:USER?.city||'Алматы',addr:'ул. Достык, 7',icon:'💅',typeName:'Нейл-студия',open:'09:00',close:'20:00',cover:'linear-gradient(135deg,#e11d4822,#fb718522)',img:null,rating:4.7,phone:'+7 705 555 6666',instagram:'@nailart_kz',services:BTYPES[2].services.map((s,i)=>({...s,id:'d3s'+i})),masters:[{id:'d3m1',name:'Жансая',spec:'Нейл-мастер',open:'09:00',close:'20:00',color:3,phone:''}],bookings:[]},
+    {salonId:'d4',bizType:'lashes',name:'Lash & Brow Bar',city:USER?.city||'Алматы',addr:'ул. Толе би, 22',icon:'👁️',typeName:'Мастер ресниц',open:'10:00',close:'20:00',cover:'linear-gradient(135deg,#d9770622,#fbbf2422)',img:null,rating:4.8,phone:'+7 700 777 8888',instagram:'@lashbar',services:BTYPES[3].services.map((s,i)=>({...s,id:'d4s'+i})),masters:[{id:'d4m1',name:'Айнур',spec:'Мастер ресниц',open:'10:00',close:'20:00',color:4,phone:''}],bookings:[]},
+    {salonId:'d5',bizType:'cosmo',name:'Glow Cosmetology',city:USER?.city||'Алматы',addr:'ул. Панфилова, 3',icon:'🌿',typeName:'Косметолог',open:'09:00',close:'19:00',cover:'linear-gradient(135deg,#16a34a22,#4ade8022)',img:null,rating:5.0,phone:'+7 702 999 0000',instagram:'@glow_cosmo',services:BTYPES[4].services.map((s,i)=>({...s,id:'d5s'+i})),masters:[{id:'d5m1',name:'Дина',spec:'Косметолог',open:'09:00',close:'19:00',color:5,phone:''}],bookings:[]},
+  ];
+  return [...real,...demos];
+}
+
+function renderSalonList(q){
+  const el=g('c-salon-list');if(!el)return;
+  let salons=getAllSalons();
+  if(cliCatF==='my') salons=salons.filter(s=>CLI_SUBS.includes(s.salonId));
+  else if(cliCatF!=='all') salons=salons.filter(s=>s.bizType===cliCatF);
+  if(q)salons=salons.filter(s=>(s.name+s.addr+s.typeName+s.city).toLowerCase().includes(q.toLowerCase()));
+  if(!salons.length){
+    el.innerHTML=cliCatF==='my'?'<div class="empty"><div class="empty-ico">💜</div><div class="empty-txt">Вы ещё не подписаны ни на один салон.<br>Нажмите «💜» на карточке салона.</div></div>':'<div class="empty"><div class="empty-ico">🌸</div><div class="empty-txt">Ничего не найдено</div></div>';
+    return;
+  }
+  el.innerHTML=salons.map(s=>salonCard(s)).join('');
+}
+function salonCard(s){
+  const isSub=CLI_SUBS.includes(s.salonId);
+  const isOpen=isOpenNow(s.open,s.close);
+  const slots=genSlots(s.open,s.close);
+  const busyT=(s.bookings||[]).filter(b=>b.date===todayStr()).map(b=>b.time);
+  const freeT=slots.filter(t=>!busyT.includes(t)).length;
+  return `<div class="salon-card">
+    <div class="salon-cover" style="background:${s.cover||'linear-gradient(135deg,#7c3aed22,#c084fc22)'}">
+      ${s.img?`<img src="${s.img}" alt="">`:''}
+      <span class="salon-cover-ico">${s.icon}</span>
+      <div class="salon-badge ${isOpen?'sb-open':'sb-closed'}">${isOpen?'Открыто':'Закрыто'}</div>
+      <button class="sub-btn ${isSub?'subbed':'not-subbed'}" onclick="toggleSub('${s.salonId}',event)">${isSub?'💜 Подписан':'🤍 Подписаться'}</button>
+    </div>
+    <div class="salon-body" onclick="openSalonDetail('${s.salonId}')">
+      <div class="salon-name">${esc(s.name)}</div>
+      <div class="salon-type" style="color:var(--acc)">${s.typeName}${s._real?' · Моя студия':''}</div>
+      <div class="salon-meta">
+        <div class="salon-m">📍 ${esc(s.addr||s.city)}</div>
+        <div class="salon-m" style="font-family:var(--mono)">🕐 ${s.open}–${s.close}</div>
+        ${s.rating?`<div class="salon-m">⭐ ${s.rating}</div>`:''}
+        <div class="salon-m" style="color:${freeT>0?'var(--green)':'var(--rose)'}">
+          ${freeT>0?`✓ ${freeT} свободных`:'Занято'}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function toggleSub(salonId,e){
+  e.stopPropagation();
+  const idx=CLI_SUBS.indexOf(salonId);
+  if(idx>=0)CLI_SUBS.splice(idx,1);
+  else CLI_SUBS.push(salonId);
+  saveCliData();renderSalonList(g('s-search')?.value||'');
+  showToast(CLI_SUBS.includes(salonId)?'Подписаны! 💜':'Отписались','i');
+  tg.HapticFeedback.impactOccurred('light');
+}
+function isOpenNow(open,close){const now=new Date();const cur=now.getHours()*60+now.getMinutes();const[oh,om]=open.split(':').map(Number);const[ch,cm]=close.split(':').map(Number);return cur>=oh*60+om&&cur<ch*60+cm;}
+
+function openSalonDetail(salonId){
+  curSalonId=salonId;
+  const s=getAllSalons().find(x=>x.salonId===salonId);if(!s)return;
+  g('salon-hdr').textContent=s.name;
+  const grp={};(s.services||[]).forEach(sv=>{if(!grp[sv.cat])grp[sv.cat]=[];grp[sv.cat].push(sv);});
+  const isSub=CLI_SUBS.includes(salonId);
+  g('s-salon-body').innerHTML=`<div style="padding:0 0 24px">
+    <div style="height:150px;background:${s.cover};display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+      ${s.img?`<img src="${s.img}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">`:''}
+      <span style="font-size:64px;position:relative;z-index:1">${s.icon}</span>
+    </div>
+    <div style="padding:16px 20px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+        <div><div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600">${esc(s.name)}</div>
+          <div style="font-size:12px;font-weight:700;color:var(--acc);margin-top:3px">${s.typeName}</div>
+          ${s.rating?`<div style="display:flex;align-items:center;gap:6px;margin-top:6px"><span style="color:var(--amber)">${'★'.repeat(Math.round(s.rating))}</span><span style="font-family:var(--mono);font-size:14px">${s.rating}</span></div>`:''}
+        </div>
+        <button class="btn btn-sm ${isSub?'btn-acc':'btn-out'}" style="width:auto;margin-top:4px" onclick="toggleSub('${salonId}',event)">${isSub?'💜 Отписаться':'🤍 Подписаться'}</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:16px">
+        <div style="font-size:13px;color:var(--text2)">📍 ${esc(s.addr)}</div>
+        <div style="font-family:var(--mono);font-size:13px;color:var(--text2)">🕐 ${s.open}–${s.close}</div>
+        ${s.phone?`<div style="font-size:13px;color:var(--text2)">📞 ${esc(s.phone)}</div>`:''}
+        ${s.instagram?`<div style="font-size:13px;color:var(--acc)">📷 ${esc(s.instagram)}</div>`:''}
+      </div>
+      ${(s.masters||[]).length?`<div class="sec-hdr"><div class="sec-t">Мастера</div></div>
+        <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;margin-bottom:16px;scrollbar-width:none">
+          ${(s.masters||[]).map(m=>`<div style="display:flex;flex-direction:column;align-items:center;gap:5px;min-width:68px;flex-shrink:0">
+            <div class="master-av" style="background:${AV_COLS[m.color%AV_COLS.length]};width:52px;height:52px">${(m.name||'?')[0]}</div>
+            <div style="font-size:12px;font-weight:600;text-align:center">${esc(m.name)}</div>
+            <div style="font-size:10px;color:var(--text3);text-align:center">${esc(m.spec||'')}</div>
+          </div>`).join('')}
+        </div>`:''}
+      <div class="sec-hdr"><div class="sec-t">Услуги</div></div>
+      ${Object.entries(grp).map(([cat,list])=>`
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">${CAT_ICONS[cat]||'⭐'} ${CAT_NAMES[cat]||cat}</div>
+        ${list.map(sv=>`<div class="svc-item svc-book" onclick="startCliBooking('${salonId}','${sv.id}')" style="margin-bottom:8px">
+          <div class="svc-ico" style="background:var(--teal2)">${CAT_ICONS[sv.cat]||'⭐'}</div>
+          <div class="svc-info"><div class="svc-name">${esc(sv.name)}</div><div class="svc-dur">${sv.dur} мин</div></div>
+          <div class="svc-price" style="color:var(--teal)">${fm(sv.price)}₸</div>
+        </div>`).join('')}`).join('')}
+      <button class="btn btn-teal" style="margin-top:16px" onclick="startCliBooking('${salonId}',null)">Записаться →</button>
+    </div>
+  </div>`;
+  showScreen('s-salon');
+}
+
+// CLIENT BOOKING WIZARD
+function startCliBooking(salonId,preSvcId){
+  const s=getAllSalons().find(x=>x.salonId===salonId);if(!s)return;
+  curSalonId=salonId;
+  cliWizStep=preSvcId?2:1;
+  cliWizData={salonId,salonName:s.name,salonIcon:s.icon,services:s.services||[],masters:s.masters||[],bookings:s.bookings||[],open:s.open,close:s.close,serviceId:preSvcId||null,serviceName:'',price:0,dur:60,masterId:s.masters?.[0]?.id||null,masterName:s.masters?.[0]?.name||'',date:todayStr(),time:''};
+  if(preSvcId){const sv=s.services?.find(x=>x.id===preSvcId);if(sv){cliWizData.serviceName=sv.name;cliWizData.price=sv.price;cliWizData.dur=sv.dur;}}
+  g('s-booking-back').onclick=()=>showScreen('s-salon');
+  renderCliWiz();showScreen('s-booking');
+}
+function renderCliWiz(){
+  const b=g('s-booking-body');if(!b)return;
+  b.innerHTML=`<div style="padding:16px 20px">
+    <div style="display:flex;gap:6px;margin-bottom:20px">${[1,2,3,4].map(i=>`<div style="flex:1;height:3px;border-radius:2px;background:${i<cliWizStep?'var(--teal)':i===cliWizStep?'linear-gradient(90deg,var(--teal),var(--acc))':'var(--border)'}"></div>`).join('')}</div>
+    ${cliWizStep===1?cliWiz1():cliWizStep===2?cliWiz2():cliWizStep===3?cliWiz3():cliWiz4()}
+  </div>`;
+}
+function cliWiz1(){
+  return `<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px">Шаг 1 · Услуга</div>
+  ${cliWizData.services.map(s=>`<div class="svc-item svc-book${cliWizData.serviceId===s.id?' sel':''}" onclick="selCliSvc('${s.id}','${esc(s.name)}',${s.price},${s.dur})" style="margin-bottom:8px">
+    <div class="svc-ico" style="background:var(--teal2)">${CAT_ICONS[s.cat]||'⭐'}</div>
+    <div class="svc-info"><div class="svc-name">${esc(s.name)}</div><div class="svc-dur">${s.dur} мин</div></div>
+    <div class="svc-price" style="color:var(--teal)">${fm(s.price)}₸</div>
+    ${cliWizData.serviceId===s.id?'<span style="color:var(--teal);font-size:18px;margin-left:4px">✓</span>':''}
+  </div>`).join('')}`;
+}
+function selCliSvc(id,name,price,dur){cliWizData.serviceId=id;cliWizData.serviceName=name;cliWizData.price=price;cliWizData.dur=dur;tg.HapticFeedback.impactOccurred('light');cliWizStep=2;renderCliWiz();}
+function cliWiz2(){
+  return `<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px">Шаг 2 · Мастер</div>
+  ${cliWizData.masters.map(m=>`<div class="master-opt${cliWizData.masterId===m.id?' sel':''}" onclick="selCliMaster('${m.id}','${esc(m.name)}')">
+    <div class="master-av" style="background:${AV_COLS[m.color%AV_COLS.length]};width:46px;height:46px">${(m.name||'?')[0]}</div>
+    <div class="master-info"><div class="master-name">${esc(m.name)}</div><div class="master-spec">${esc(m.spec||'')}</div></div>
+    ${cliWizData.masterId===m.id?'<span style="color:var(--teal);font-size:20px">✓</span>':''}
+  </div>`).join('')}
+  <button class="btn btn-ghost" style="margin-top:8px" onclick="cliWizStep=1;renderCliWiz()">← Назад</button>`;
+}
+function selCliMaster(id,name){cliWizData.masterId=id;cliWizData.masterName=name;tg.HapticFeedback.impactOccurred('light');cliWizStep=3;renderCliWiz();}
+function cliWiz3(){
+  const slots=genSlots(cliWizData.open,cliWizData.close);
+  const busyT=(cliWizData.bookings||[]).filter(b=>b.date===cliWizData.date&&b.masterId===cliWizData.masterId).map(b=>b.time);
+  return `<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px">Шаг 3 · Дата и время</div>
+  <div class="cal-strip" id="cli-cal" style="margin-bottom:12px"></div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Свободные слоты на ${cliWizData.date}:</div>
+  <div class="time-grid">${slots.map(t=>`<div class="ts${cliWizData.time===t?' on':''}${busyT.includes(t)?' busy':''}" onclick="${busyT.includes(t)?'':("selCliTime('"+t+"')")}">${t}</div>`).join('')}</div>
+  <button class="btn btn-ghost" style="margin-top:4px" onclick="cliWizStep=2;renderCliWiz()">← Назад</button>`;
+}
+function selCliTime(t){cliWizData.time=t;tg.HapticFeedback.impactOccurred('light');cliWizStep=4;renderCliWiz();}
+function cliWiz4(){
+  return `<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px">Шаг 4 · Подтверждение</div>
+  <div class="bconf cli">
+    <div class="bc-row"><div class="bc-ico">${cliWizData.salonIcon}</div><div><div class="bc-lbl">Студия</div><div class="bc-val">${esc(cliWizData.salonName)}</div></div></div>
+    <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(cliWizData.serviceName)}</div></div></div>
+    <div class="bc-row"><div class="bc-ico">👩‍💼</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">${esc(cliWizData.masterName)}</div></div></div>
+    <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val" style="font-family:var(--mono)">${cliWizData.date} · ${cliWizData.time}</div></div></div>
+    <div class="bc-row" style="border-bottom:none"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val" style="font-family:var(--mono);font-size:18px;color:var(--teal)">${fm(cliWizData.price)}₸</div></div></div>
+  </div>
+  <div class="fld" style="margin-bottom:16px"><label>Комментарий</label><textarea id="cli-note" placeholder="Ваши пожелания..."></textarea></div>
+  <button class="btn btn-teal" onclick="confirmCliBk()">✓ Подтвердить запись</button>
+  <button class="btn btn-ghost" style="margin-top:8px" onclick="cliWizStep=3;renderCliWiz()">← Назад</button>`;
+}
+function confirmCliBk(){
+  if(!cliWizData.serviceId||!cliWizData.time){showToast('Выберите услугу и время','e');return;}
+  const bk={id:'cb'+Date.now(),salonId:cliWizData.salonId,salonName:cliWizData.salonName,salonIcon:cliWizData.salonIcon,clientName:USER?.name||USER?.firstName||'Клиент',clientPhone:USER?.phone||'',serviceId:cliWizData.serviceId,serviceName:cliWizData.serviceName,price:cliWizData.price,dur:cliWizData.dur,masterId:cliWizData.masterId,masterName:cliWizData.masterName,date:cliWizData.date,time:cliWizData.time,status:'pending',note:g('cli-note')?.value||'',createdAt:new Date().toISOString()};
+  CLI_BKS.push(bk);saveCliData();
+  // If booking real salon, push to owner bookings too
+  if(cliWizData.salonId===BIZ?.id){
+    let cid=CLIENTS.find(c=>c.phone===USER?.phone)?.id;
+    if(!cid){cid='cc'+Date.now();CLIENTS.push({id:cid,name:bk.clientName,phone:USER?.phone||'',dob:'',note:'',visits:0,totalSpent:0,color:CLIENTS.length%AV_COLS.length,createdAt:new Date().toISOString()});}
+    BOOKINGS.push({...bk,id:'b'+Date.now(),clientId:cid});
+    NOTIFS.push({id:'n'+Date.now(),text:`Онлайн-запись: ${bk.clientName} — ${bk.serviceName} ${bk.time}`});
+    saveData();
+  }
+  tg.HapticFeedback.impactOccurred('heavy');
+  showToast('🌸 Запись создана!','s');
+  showScreen('s-mybookings');renderCliMyBks();
+}
+function renderCliMyBks(){
+  const el=g('s-mybk-list');if(!el)return;
+  if(!CLI_BKS.length){el.innerHTML='<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Записей пока нет.<br>Найдите салон и запишитесь!</div></div>';return;}
+  const sorted=[...CLI_BKS].sort((a,b)=>b.date.localeCompare(a.date)||b.time.localeCompare(a.time));
+  el.innerHTML=sorted.map(b=>`<div class="my-bk">
+    <div class="my-bk-hdr">
+      <div><div class="my-bk-salon">${b.salonIcon} ${esc(b.salonName)}</div><div class="my-bk-type">${esc(b.serviceName)}</div></div>
+      <span class="badge ${STATUS_C[b.status]||'bd-wait'}">${STATUS_L[b.status]||b.status}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <div style="display:flex;gap:8px;font-size:13px;color:var(--text2)"><span>📅</span><span style="font-family:var(--mono)">${b.date} · ${b.time}</span></div>
+      <div style="display:flex;gap:8px;font-size:13px;color:var(--text2)"><span>👩‍💼</span><span>${esc(b.masterName)}</span></div>
+    </div>
+    <div class="my-bk-total">${fm(b.price)}₸</div>
+    ${b.status==='pending'||b.status==='confirmed'?`<button class="btn btn-rose btn-sm" style="margin-top:10px" onclick="cancelCliBk('${b.id}')">Отменить</button>`:''}
+  </div>`).join('');
+  g('cli-pip')?.classList.toggle('vis',CLI_BKS.some(b=>b.status==='pending'));
+}
+function cancelCliBk(id){const idx=CLI_BKS.findIndex(b=>b.id===id);if(idx<0)return;CLI_BKS[idx].status='cancelled';saveCliData();renderCliMyBks();showToast('Запись отменена');}
+
+function cliTab(tab){
+  const screens={catalog:'s-catalog',bookings:'s-mybookings',prof:'s-prof'};
+  Object.values(screens).forEach(s=>g(s)?.classList.remove('active'));
+  g(screens[tab])?.classList.add('active');
+  if(tab==='bookings')renderCliMyBks();
+  if(tab==='prof'){renderCliProf();showScreen('s-prof');}
+  tg.HapticFeedback.impactOccurred('light');
+}
+
+function renderCliProf(){
+  const b=g('prof-body');if(!b)return;
+  const visits=CLI_BKS.filter(x=>x.status==='done').length;
+  const spent=CLI_BKS.filter(x=>x.status==='done').reduce((s,x)=>s+x.price,0);
+  b.innerHTML=`<div style="padding:0 0 16px">
+    <div class="prof-banner teal">
+      <div class="prof-av av-teal">${(USER?.firstName||'К')[0]}</div>
+      <div><div class="prof-n">${esc(USER?.name||USER?.firstName||'—')}</div>
+        <div class="prof-role" style="color:var(--teal)">🌸 Клиент</div>
+        <div class="prof-meta">📱 ${esc(USER?.phone||'—')}</div>
+        <div class="prof-meta">📍 ${esc(USER?.city||'—')}</div>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div style="background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px;text-align:center"><div style="font-family:var(--mono);font-size:22px;font-weight:500;color:var(--teal)">${visits}</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Визитов</div></div>
+      <div style="background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px;text-align:center"><div style="font-family:var(--mono);font-size:22px;font-weight:500;color:var(--teal)">${fm(spent)}₸</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Потрачено</div></div>
+    </div>
+    <div class="sec-lbl">Аккаунт</div>
+    <div class="menu-list">
+      <button class="menu-item" onclick="openChangeRole()"><div class="menu-ico mi-bl">⇄</div><span class="menu-txt">Сменить роль</span><span class="menu-val">Клиент</span><span class="menu-arr">›</span></button>
+      <button class="menu-item" onclick="openModal('m-support')"><div class="menu-ico mi-r">💬</div><span class="menu-txt">Поддержка</span><span class="menu-arr">›</span></button>
+    </div>
+    <button class="btn btn-ghost" style="margin-top:4px" onclick="confirmReset()">Сбросить данные</button>
+  </div>`;
+  g('prof-bnav').innerHTML=`
+    <button class="ni" onclick="cliTab('catalog')"><div class="ni-bar"></div><span class="ni-ico">🌸</span><span class="ni-lbl">Салоны</span></button>
+    <button class="ni" onclick="cliTab('bookings')"><div class="ni-bar"></div><span class="ni-ico">📋</span><span class="ni-lbl">Записи</span></button>
+    <button class="ni on" onclick="cliTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>`;
+  showScreen('s-prof');
+}
+
+// ════════════════════════════════════════
+// MASTER MODE
+// ════════════════════════════════════════
+function initMaster(){
+  const n=USER?.firstName||USER?.name||'Мастер';
+  g('mst-hdr-n').textContent=n;g('mst-av').textContent=n[0];
+  renderMasterSched();renderMasterProf();
+  showScreen('s-master-sched');
+}
+
+function renderMasterSched(){
+  renderCalStrip('m-cal',false,true);
+  const el=g('m-sched-list');if(!el)return;
+  // Find all bookings where master's phone matches
+  const myPhone=USER?.phone||'';
+  // Find masters across all salons that have this phone
+  const myMasterIds=MASTERS.filter(m=>m.phone&&m.phone.replace(/\D/g,'')===myPhone.replace(/\D/g,'')).map(m=>m.id);
+  let list=BOOKINGS.filter(b=>myMasterIds.includes(b.masterId)&&b.date===selDate);
+  // Also include all bookings if no phone match (single-master case)
+  if(!myMasterIds.length)list=BOOKINGS.filter(b=>b.date===selDate);
+  list.sort((a,b)=>a.time.localeCompare(b.time));
+  if(!list.length){el.innerHTML='<div class="empty"><div class="empty-ico">📆</div><div class="empty-txt">Нет записей на этот день</div></div>';return;}
+  el.innerHTML=list.map(b=>apptCard(b,true)).join('');
+}
+
+function mstTab(tab){
+  if(tab==='sched'){showScreen('s-master-sched');renderMasterSched();}
+  else if(tab==='prof'){renderMasterProf();showScreen('s-prof');}
+  tg.HapticFeedback.impactOccurred('light');
+}
+
+function renderMasterProf(){
+  const b=g('prof-body');if(!b)return;
+  const myPhone=USER?.phone||'';
+  const myMasterIds=MASTERS.filter(m=>m.phone&&m.phone.replace(/\D/g,'')===myPhone.replace(/\D/g,'')).map(m=>m.id);
+  const myBks=BOOKINGS.filter(b=>myMasterIds.includes(b.masterId)||!myMasterIds.length);
+  const done=myBks.filter(b=>b.status==='done');
+  // Group by salon
+  const bySalon={};myBks.forEach(bk=>{const key=bk.salonName||BIZ?.name||'—';if(!bySalon[key])bySalon[key]=0;bySalon[key]++;});
+  b.innerHTML=`<div style="padding:0 0 16px">
+    <div class="prof-banner amber">
+      <div class="prof-av av-amber">${(USER?.firstName||'М')[0]}</div>
+      <div><div class="prof-n">${esc(USER?.name||USER?.firstName||'—')}</div>
+        <div class="prof-role" style="color:var(--amber)">✂️ Мастер</div>
+        <div class="prof-meta">📱 ${esc(USER?.phone||'—')}</div>
+        <div class="prof-meta">📍 ${esc(USER?.city||'—')}</div>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div style="background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px;text-align:center"><div style="font-family:var(--mono);font-size:22px;font-weight:500;color:var(--amber)">${done.length}</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Завершено</div></div>
+      <div style="background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px;text-align:center"><div style="font-family:var(--mono);font-size:22px;font-weight:500;color:var(--amber)">${Object.keys(bySalon).length}</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Салонов</div></div>
+    </div>
+    ${Object.keys(bySalon).length?`<div class="sec-hdr"><div class="sec-t">Мои салоны</div></div>
+    ${Object.entries(bySalon).map(([name,cnt])=>`<div style="background:var(--bg3);border-radius:var(--rsm);border:1px solid var(--border);padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:14px;font-weight:600">${esc(name)}</span><span style="font-family:var(--mono);font-size:12px;color:var(--text2)">${cnt} записей</span></div>`).join('')}`:''}
+    <div class="sec-lbl">Аккаунт</div>
+    <div class="menu-list">
+      <button class="menu-item" onclick="openChangeRole()"><div class="menu-ico mi-bl">⇄</div><span class="menu-txt">Сменить роль</span><span class="menu-val">Мастер</span><span class="menu-arr">›</span></button>
+      <button class="menu-item" onclick="openModal('m-support')"><div class="menu-ico mi-r">💬</div><span class="menu-txt">Поддержка</span><span class="menu-arr">›</span></button>
+    </div>
+  </div>`;
+  g('prof-bnav').innerHTML=`
+    <button class="ni" onclick="mstTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Расписание</span></button>
+    <button class="ni on" onclick="mstTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>`;
+  showScreen('s-prof');
+}
+
+// ════════════════════════════════════════
+// CHANGE ROLE
+// ════════════════════════════════════════
+function openChangeRole(){
+  const b=g('change-role-body');if(!b)return;
+  b.innerHTML=['client','owner','master'].map(r=>`<div class="role-card${USER?.role===r?' sel':''}" style="margin-bottom:10px" onclick="confirmChangeRole('${r}')">
+    <div class="rc-icon rc-${r==='client'?'cli':r==='owner'?'own':'mst'}">${ROLE_META[r].icon}</div>
+    <div class="rc-body"><div class="rc-name">${ROLE_META[r].name}</div><div class="rc-desc">${ROLE_META[r].desc}</div></div>
+    ${USER?.role===r?'<span style="color:var(--acc);font-size:14px;font-weight:700">Текущая</span>':''}
+  </div>`).join('');
+  openModal('m-change-role');
+}
+async function confirmChangeRole(r){
+  if(r===USER?.role){closeModal('m-change-role');return;}
+  if(r==='owner'&&!BIZ){
+    // Need to set up salon
+    USER.role=r;ls.set('users_'+UID,USER);
+    closeModal('m-change-role');
+    obRole='owner';obStep=3;renderObStep();showScreen('s-onboard');return;
+  }
+  USER.role=r;
+  await fbSet('users',UID,{role:r});
+  ls.set('users_'+UID,USER);
+  closeModal('m-change-role');
+  showToast('Роль изменена','s');
+  initByRole(r);
+}
+
+// ════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════
+function genSlots(open,close){
+  const[oh,om]=(open||'09:00').split(':').map(Number);const[ch,cm]=(close||'21:00').split(':').map(Number);
+  const slots=[];let cur=oh*60+om;const end=ch*60+cm;
+  while(cur+30<=end){slots.push(String(Math.floor(cur/60)).padStart(2,'0')+':'+String(cur%60).padStart(2,'0'));cur+=30;}
+  return slots;
+}
+function todayStr(){return dateStr(new Date());}
+function dateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function fm(n){return(n||0).toLocaleString('ru');}
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+function g(id){return document.getElementById(id);}
+
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));g(id)?.classList.add('active');}
+function openModal(id){const el=g(id);el?.classList.add('open');if(id==='m-analytics')renderAnalytics();if(id==='m-notif')renderNotifs();}
+function closeModal(id){g(id)?.classList.remove('open');}
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+
+let _t=null;
+function showToast(msg,type=''){const el=g('toast');el.textContent=msg;el.className='toast show '+type;if(_t)clearTimeout(_t);_t=setTimeout(()=>el.classList.remove('show'),3000);}
+
+function shareLink(){const link='https://t.me/BeautyProBot?start='+(UID||'');if(navigator.clipboard)navigator.clipboard.writeText(link);showToast('Ссылка скопирована! 🔗','i');}
+function sendSupport(){const msg=g('sup-msg')?.value.trim();if(!msg){showToast('Введите сообщение','e');return;}closeModal('m-support');g('sup-msg').value='';showToast('Отправлено ✓','s');}
+function confirmReset(){if(!confirm('Сбросить все данные?'))return;['uid','biz','bookings','clients','services','masters','notifs','cli_bks','cli_subs'].forEach(k=>ls.del(k));location.reload();}
+</script>
+</body>
+</html>
