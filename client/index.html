@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Zap is...</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, orderBy }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+const cfg = {
+  apiKey:"AIzaSyD6wnCYIGciW_VRujcxlis7HEgGfWC6vOA",
+  authDomain:"telegram-crm-85b05.firebaseapp.com",
+  projectId:"telegram-crm-85b05",
+  storageBucket:"telegram-crm-85b05.firebasestorage.app",
+  messagingSenderId:"499866542692",
+  appId:"1:499866542692:web:88eafe1e886c50bff03571",
+  measurementId:"G-613KEDVY7V"
+};
+try {
+  const app = initializeApp(cfg);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  window._FB = { db, auth, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, orderBy, signInAnonymously };
+  window._fbReady = true;
+} catch(e) { window._fbReady = false; }
+window.dispatchEvent(new Event('fbReady'));
+</script>
+<style>
+:root{
+  --bg:#0e0e12;--bg2:#141418;--bg3:#1a1a20;--bg4:#22222a;
+  --card:#17171d;--border:#252530;--border2:#303040;
+  --acc:#2dd4bf;--acc2:#0891b2;--acc3:rgba(45,212,191,.15);
+  --amber:#fbbf24;--amber2:rgba(251,191,36,.12);
+  --rose:#fb7185;--rose2:rgba(251,113,133,.12);
+  --green:#4ade80;--green2:rgba(74,222,128,.12);
+  --purple:#c084fc;--purple2:rgba(192,132,252,.15);
+  --text:#f0f0f8;--text2:#8888a0;--text3:#44445a;
+  --r:14px;--rsm:10px;--nav:72px;
+  --ease:.28s cubic-bezier(.4,0,.2,1);
+  --spring:.38s cubic-bezier(.34,1.56,.64,1);
+  --mono:'DM Mono',monospace
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Manrope',sans-serif}
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg);
+  opacity:0;pointer-events:none;transform:translateY(16px);
+  transition:opacity var(--ease),transform var(--ease);overflow:hidden}
+.screen.active{opacity:1;pointer-events:all;transform:none}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* SPLASH */
+#s-splash{align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 35%,rgba(45,212,191,.18) 0%,transparent 65%),var(--bg)}
+.splash-logo{width:96px;height:96px;border-radius:28px;
+  background:linear-gradient(135deg,#2dd4bf,#0891b2);
+  display:flex;align-items:center;justify-content:center;font-size:46px;
+  animation:logoPulse 2.5s ease-in-out infinite;
+  box-shadow:0 0 0 1px rgba(45,212,191,.3),0 20px 60px rgba(45,212,191,.4)}
+@keyframes logoPulse{0%,100%{box-shadow:0 0 0 1px rgba(45,212,191,.3),0 20px 50px rgba(45,212,191,.3)}
+  50%{box-shadow:0 0 0 2px rgba(45,212,191,.5),0 24px 70px rgba(45,212,191,.55)}}
+.splash-name{font-family:'Playfair Display',serif;font-size:32px;font-weight:600;margin-top:20px;letter-spacing:-.3px}
+.splash-tag{font-size:11px;color:var(--text2);margin-top:5px;letter-spacing:1.2px;text-transform:uppercase}
+.splash-bar{width:160px;height:3px;background:var(--bg4);border-radius:2px;margin-top:52px;overflow:hidden}
+.splash-prog{height:100%;background:linear-gradient(90deg,var(--acc),var(--purple));border-radius:2px;animation:prog 2.3s ease forwards}
+@keyframes prog{from{width:0}to{width:100%}}
+
+/* FORM */
+.auth-wrap{flex:1;overflow-y:auto;padding:52px 24px 48px;display:flex;flex-direction:column}
+.auth-logo{font-size:40px;margin-bottom:18px}
+.auth-title{font-family:'Playfair Display',serif;font-size:26px;font-weight:600;margin-bottom:8px;line-height:1.2}
+.auth-sub{font-size:14px;color:var(--text2);margin-bottom:32px;line-height:1.6}
+.fg{display:flex;flex-direction:column;gap:10px}
+.fr{display:flex;gap:10px}
+.fld{flex:1;position:relative}
+.fld label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:.3px}
+.fld input,.fld select,.fld textarea{width:100%;padding:13px 15px;border-radius:var(--rsm);
+  border:1.5px solid var(--border);background:var(--bg3);color:var(--text);
+  font-family:'Manrope',sans-serif;font-size:15px;outline:none;
+  transition:border-color var(--ease);-webkit-appearance:none}
+.fld input:focus,.fld select:focus{border-color:var(--acc);background:var(--bg4)}
+.fld input::placeholder{color:var(--text3)}
+.fld input[readonly]{color:var(--text2);cursor:default;background:var(--bg2)}
+.fld input[readonly]:focus{border-color:var(--border)}
+.phone-lock{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3)}
+
+/* BUTTONS */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:15px 20px;
+  border-radius:var(--r);border:none;cursor:pointer;font-family:'Manrope',sans-serif;
+  font-size:15px;font-weight:700;transition:all var(--ease);width:100%}
+.btn:active{transform:scale(.97)}
+.btn-acc{background:linear-gradient(135deg,#2dd4bf,#0891b2);color:#fff;box-shadow:0 6px 20px rgba(45,212,191,.35)}
+.btn-out{background:transparent;color:var(--text);border:1.5px solid var(--border2)}
+.btn-out:active{background:var(--bg3)}
+.btn-sm{padding:9px 14px;font-size:12px;border-radius:var(--rsm);width:auto}
+.btn-ghost{background:var(--bg4);color:var(--text2);border:none;font-weight:500}
+.btn-rose{background:var(--rose2);color:var(--rose);border:1px solid rgba(251,113,133,.3)}
+.btn:disabled{opacity:.35;pointer-events:none}
+
+/* HEADER */
+.mhdr{padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg)}
+.hdr-l{display:flex;flex-direction:column;gap:2px}
+.hdr-g{font-size:11px;color:var(--text3);font-weight:500;letter-spacing:.3px}
+.hdr-n{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;line-height:1.2}
+.hdr-r{display:flex;align-items:center;gap:10px}
+.avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:700;color:#fff;cursor:pointer;flex-shrink:0;
+  background:linear-gradient(135deg,#2dd4bf,#0891b2)}
+.back-btn{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;
+  color:var(--text2);background:none;border:none;cursor:pointer;padding:4px 0}
+
+/* SCROLL */
+.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px);-webkit-overflow-scrolling:touch}
+.scroll::-webkit-scrollbar{display:none}
+.scroll-full{flex:1;overflow-y:auto;padding:16px 20px 32px;-webkit-overflow-scrolling:touch}
+.scroll-full::-webkit-scrollbar{display:none}
+
+/* BOTTOM NAV */
+.bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nav);
+  background:rgba(14,14,18,.93);backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);display:flex;align-items:center;
+  padding:0 4px;padding-bottom:env(safe-area-inset-bottom);z-index:100}
+.ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;padding:8px 4px;cursor:pointer;border:none;background:none;position:relative;
+  border-radius:var(--rsm);transition:all var(--ease)}
+.ni-bar{position:absolute;top:0;left:50%;transform:translateX(-50%);width:20px;height:3px;
+  border-radius:0 0 3px 3px;background:var(--acc);opacity:0;transition:opacity var(--ease)}
+.ni.on .ni-bar{opacity:1}
+.ni-ico{font-size:21px;transition:transform var(--spring)}
+.ni-lbl{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.3px;
+  transition:color var(--ease);text-transform:uppercase}
+.ni.on .ni-lbl{color:var(--acc)}
+.ni.on .ni-ico{transform:scale(1.12)}
+.ni-pip{position:absolute;top:7px;right:calc(50% - 14px);width:6px;height:6px;
+  border-radius:50%;background:var(--rose);border:2px solid var(--bg);display:none}
+.ni-pip.vis{display:block}
+
+/* CARDS */
+.card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);overflow:hidden;margin-bottom:12px}
+
+/* SEARCH */
+.search-wrap{position:relative;margin-bottom:12px}
+.search-ico{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3)}
+.search-inp{width:100%;padding:12px 14px 12px 40px;border-radius:var(--r);
+  border:1.5px solid var(--border);background:var(--bg3);color:var(--text);
+  font-family:'Manrope',sans-serif;font-size:14px;outline:none;transition:border-color var(--ease)}
+.search-inp:focus{border-color:var(--acc)}
+.search-inp::placeholder{color:var(--text3)}
+
+/* CHIP */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:20px;
+  border:1.5px solid var(--border);background:var(--card);cursor:pointer;
+  font-size:12px;font-weight:600;transition:all var(--ease);white-space:nowrap;color:var(--text2)}
+.chip.on{border-color:var(--acc);background:var(--acc3);color:var(--acc)}
+.chip:active{transform:scale(.96)}
+
+/* SALON CARD */
+.salon-card{background:var(--card);border-radius:20px;border:1px solid var(--border);
+  margin-bottom:14px;overflow:hidden;cursor:pointer;transition:all var(--ease)}
+.salon-card:active{transform:scale(.99);background:var(--bg3)}
+.salon-cover{height:110px;display:flex;align-items:center;justify-content:center;
+  font-size:52px;position:relative;overflow:hidden}
+.salon-cover img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.salon-cover-ico{position:relative;z-index:1;font-size:50px;text-shadow:0 2px 12px rgba(0,0,0,.5)}
+.salon-badge{position:absolute;top:10px;right:10px;padding:4px 10px;border-radius:20px;
+  font-size:11px;font-weight:700;z-index:2}
+.sb-open{background:rgba(74,222,128,.2);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+.sb-closed{background:rgba(251,113,133,.15);color:var(--rose);border:1px solid rgba(251,113,133,.25)}
+.salon-body{padding:13px 16px}
+.salon-name{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;margin-bottom:4px}
+.salon-type{font-size:12px;font-weight:600;margin-bottom:8px;color:var(--acc)}
+.salon-meta{display:flex;gap:10px;flex-wrap:wrap}
+.salon-m{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px}
+
+/* SERVICE ITEM */
+.svc-item{background:var(--bg3);border-radius:var(--r);border:1.5px solid var(--border);
+  padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;
+  transition:all var(--ease);cursor:pointer}
+.svc-item.sel{border-color:var(--acc);background:var(--acc3)}
+.svc-item:active{transform:scale(.98)}
+.svc-ico{width:40px;height:40px;border-radius:var(--rsm);background:var(--acc3);
+  display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.svc-info{flex:1;min-width:0}
+.svc-name{font-size:14px;font-weight:600;margin-bottom:3px}
+.svc-dur{font-family:var(--mono);font-size:12px;color:var(--text2)}
+.svc-price{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--acc);flex-shrink:0}
+
+/* MASTER OPT */
+.master-opt{background:var(--bg3);border-radius:var(--r);border:1.5px solid var(--border);
+  padding:14px;margin-bottom:8px;display:flex;gap:12px;align-items:center;
+  cursor:pointer;transition:all var(--ease)}
+.master-opt.sel{border-color:var(--acc);background:var(--acc3)}
+.master-opt:active{transform:scale(.98)}
+.master-av{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0}
+.master-info{flex:1;min-width:0}
+.master-name{font-size:14px;font-weight:700;margin-bottom:2px}
+.master-spec{font-size:12px;color:var(--text2)}
+
+/* CALENDAR */
+.cal-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;scrollbar-width:none}
+.cal-strip::-webkit-scrollbar{display:none}
+.cal-day{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;
+  padding:10px 6px;border-radius:var(--r);border:1.5px solid var(--border);
+  cursor:pointer;transition:all var(--ease);flex-shrink:0;background:var(--bg3)}
+.cal-day.on{border-color:var(--acc);background:var(--acc3)}
+.cal-day.today .cal-d{color:var(--acc)}
+.cal-wd{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.cal-d{font-family:var(--mono);font-size:18px;font-weight:500;line-height:1}
+
+/* TIME GRID */
+.time-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.ts{padding:11px 6px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);
+  text-align:center;font-family:var(--mono);font-size:13px;font-weight:500;cursor:pointer;
+  transition:all var(--ease);color:var(--text2)}
+.ts.on{border-color:var(--acc);background:var(--acc3);color:var(--acc)}
+.ts.busy{opacity:.25;pointer-events:none;text-decoration:line-through}
+.ts:active:not(.busy){transform:scale(.95)}
+
+/* WIZ */
+.wiz-steps{display:flex;gap:6px;margin-bottom:20px}
+.wiz-step{flex:1;height:3px;border-radius:2px;background:var(--border);transition:background var(--ease)}
+.wiz-step.done{background:var(--acc)}.wiz-step.active{background:linear-gradient(90deg,var(--acc),var(--purple))}
+
+/* BOOKING CARD */
+.bconf{border-radius:var(--r);border:1px solid rgba(45,212,191,.2);padding:16px;margin-bottom:16px;
+  background:linear-gradient(135deg,var(--acc3),rgba(192,132,252,.07))}
+.bc-row{display:flex;align-items:flex-start;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)}
+.bc-row:last-child{border-bottom:none}
+.bc-ico{font-size:17px;width:26px;text-align:center;flex-shrink:0;margin-top:1px}
+.bc-lbl{font-size:11px;color:var(--text2);margin-bottom:2px;font-weight:600;letter-spacing:.2px}
+.bc-val{font-size:14px;font-weight:600}
+
+/* MY BOOKINGS */
+.bk-card{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);
+  padding:14px 16px;margin-bottom:10px;animation:fadeUp .3s ease both}
+.bk-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
+.bk-salon{font-size:15px;font-weight:700}
+.bk-date{font-family:var(--mono);font-size:12px;color:var(--text2);margin-top:2px}
+.bk-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);margin-top:5px}
+.bk-price{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--acc);margin-top:10px}
+
+/* BADGE */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:20px;
+  font-size:11px;font-weight:700;letter-spacing:.2px}
+.bd-wait{background:var(--amber2);color:var(--amber)}
+.bd-conf{background:var(--purple2);color:var(--purple)}
+.bd-done{background:var(--green2);color:var(--green)}
+.bd-canc{background:var(--rose2);color:var(--rose)}
+.dot-p{width:6px;height:6px;border-radius:50%;background:currentColor;animation:dp 1.4s ease-in-out infinite}
+@keyframes dp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
+
+/* SECTION */
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;margin-top:4px}
+.sec-t{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px}
+
+/* MENU ITEMS */
+.menu-list{display:flex;flex-direction:column;gap:2px;margin-bottom:20px}
+.menu-item{display:flex;align-items:center;gap:14px;padding:15px 16px;background:var(--bg3);
+  border-radius:var(--rsm);cursor:pointer;transition:background var(--ease);
+  border:none;width:100%;text-align:left;color:var(--text)}
+.menu-item:active{background:var(--bg4)}
+.menu-ico{width:36px;height:36px;border-radius:var(--rsm);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.mi-t{background:var(--acc3)}.mi-r{background:var(--rose2)}.mi-b{background:var(--amber2)}
+.menu-txt{flex:1;font-size:15px;font-weight:500}
+.menu-arr{color:var(--text3)}
+
+/* MODAL */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;
+  z-index:200;opacity:0;pointer-events:none;transition:opacity var(--ease);backdrop-filter:blur(6px)}
+.modal.open{opacity:1;pointer-events:all}
+.modal-sheet{width:100%;background:var(--bg2);border-radius:24px 24px 0 0;
+  border-top:1px solid var(--border);padding:0 20px 40px;transform:translateY(100%);
+  transition:transform .38s cubic-bezier(.4,0,.2,1);max-height:90vh;overflow-y:auto}
+.modal.open .modal-sheet{transform:none}
+.modal-pill{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:12px auto 18px}
+.modal-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:16px}
+
+/* TOAST */
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-110px);
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--rsm);
+  padding:11px 20px;font-size:14px;font-weight:600;z-index:300;
+  transition:transform .35s cubic-bezier(.4,0,.2,1);white-space:nowrap;
+  max-width:92vw;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.s{border-color:rgba(74,222,128,.4)}.toast.e{border-color:rgba(251,113,133,.4)}
+
+/* EMPTY */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:44px 20px;text-align:center;gap:10px}
+.empty-ico{font-size:44px;opacity:.25}
+.empty-txt{color:var(--text2);font-size:14px;line-height:1.6}
+
+/* SPINNER */
+.spin-center{display:flex;align-items:center;justify-content:center;padding:48px}
+.spinner{width:32px;height:32px;border:2.5px solid var(--border2);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
+.divider{height:1px;background:var(--border);margin:16px 0}
+
+/* PROF BANNER */
+.prof-banner{border-radius:var(--r);border:1px solid rgba(45,212,191,.2);padding:20px;
+  margin-bottom:16px;display:flex;gap:16px;align-items:center;
+  background:linear-gradient(135deg,rgba(45,212,191,.12),rgba(192,132,252,.06))}
+.prof-av{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:22px;font-weight:700;color:#fff;flex-shrink:0;
+  background:linear-gradient(135deg,#2dd4bf,#0891b2)}
+.prof-n{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;margin-bottom:3px}
+.prof-meta{font-size:12px;color:var(--text2);margin-top:2px}
+.sec-lbl{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;
+  letter-spacing:1.5px;margin-bottom:8px;margin-top:20px}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div class="screen active" id="s-splash">
+  <div style="display:flex;flex-direction:column;align-items:center">
+    <div class="splash-logo">✦</div>
+    <div class="splash-name">Zap is...</div>
+    <div class="splash-tag">Beauty Platform</div>
+    <div class="splash-bar"><div class="splash-prog"></div></div>
+  </div>
+</div>
+
+<!-- NO UID -->
+<div class="screen" id="s-nouid">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:32px">
+    <div style="font-size:56px">🔗</div>
+    <div style="font-family:'Playfair Display',serif;font-size:24px;font-weight:600">Войдите через Telegram</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6">Откройте бота <b style="color:var(--acc)">@ZapClientBot</b> и нажмите /start, чтобы получить ссылку для входа</div>
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px;font-family:var(--mono);font-size:14px;color:var(--acc)">@ZapClientBot</div>
+  </div>
+</div>
+
+<!-- ONBOARD -->
+<div class="screen" id="s-onboard">
+  <div class="auth-wrap">
+    <div class="auth-logo">✦</div>
+    <div class="auth-title">Добро пожаловать!</div>
+    <div class="auth-sub">Как вас зовут? Это имя увидят в салоне при записи</div>
+    <div class="fg" style="margin-bottom:24px">
+      <div class="fr">
+        <div class="fld"><label>Имя</label><input type="text" id="ob-fname" placeholder="Имя"></div>
+        <div class="fld"><label>Фамилия</label><input type="text" id="ob-lname" placeholder="Фамилия"></div>
+      </div>
+      <div class="fld">
+        <label>Телефон (из Telegram)</label>
+        <div style="position:relative">
+          <input type="tel" id="ob-phone" readonly style="padding-right:40px">
+          <span class="phone-lock">🔒</span>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:5px">Привязан к вашему Telegram-аккаунту</div>
+      </div>
+    </div>
+    <button class="btn btn-acc" onclick="finishOnboard()">Начать →</button>
+  </div>
+</div>
+
+<!-- CATALOG -->
+<div class="screen" id="s-catalog">
+  <div class="mhdr">
+    <div class="hdr-l">
+      <div class="hdr-g">Zap is...</div>
+      <div class="hdr-n">Каталог салонов</div>
+    </div>
+    <div class="hdr-r">
+      <div class="avatar" id="cli-av" onclick="showTab('profile')">К</div>
+    </div>
+  </div>
+  <div class="scroll">
+    <div class="search-wrap">
+      <span class="search-ico">🔍</span>
+      <input class="search-inp" type="text" placeholder="Название, адрес..." id="s-search" oninput="filterSalons(this.value)">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none" id="cat-filter"></div>
+    <div id="salon-list"></div>
+  </div>
+  <div class="bnav">
+    <button class="ni on" onclick="showTab('catalog')"><div class="ni-bar"></div><span class="ni-ico">🌸</span><span class="ni-lbl">Салоны</span></button>
+    <button class="ni" onclick="showTab('bookings')"><div class="ni-bar"></div><span class="ni-ico">📋</span><span class="ni-lbl">Записи</span><div class="ni-pip" id="bk-pip"></div></button>
+    <button class="ni" onclick="showTab('profile')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- SALON DETAIL -->
+<div class="screen" id="s-salon">
+  <div class="mhdr">
+    <button class="back-btn" onclick="showScreen('s-catalog')">← Назад</button>
+    <div class="hdr-n" id="salon-hdr">Салон</div>
+    <div style="width:60px"></div>
+  </div>
+  <div class="scroll-full" id="salon-body"></div>
+</div>
+
+<!-- BOOKING WIZARD -->
+<div class="screen" id="s-booking">
+  <div class="mhdr">
+    <button class="back-btn" id="bk-back-btn" onclick="bookingBack()">← Назад</button>
+    <div class="hdr-n" id="bk-hdr-title">Запись</div>
+    <div style="width:60px"></div>
+  </div>
+  <div class="scroll-full">
+    <div class="wiz-steps" id="wiz-dots"></div>
+    <div id="wiz-body"></div>
+  </div>
+</div>
+
+<!-- MY BOOKINGS -->
+<div class="screen" id="s-mybookings">
+  <div class="mhdr"><div class="hdr-n">Мои записи</div></div>
+  <div class="scroll" id="mybk-list"></div>
+  <div class="bnav">
+    <button class="ni" onclick="showTab('catalog')"><div class="ni-bar"></div><span class="ni-ico">🌸</span><span class="ni-lbl">Салоны</span></button>
+    <button class="ni on" onclick="showTab('bookings')"><div class="ni-bar"></div><span class="ni-ico">📋</span><span class="ni-lbl">Записи</span></button>
+    <button class="ni" onclick="showTab('profile')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- PROFILE -->
+<div class="screen" id="s-profile">
+  <div class="mhdr"><div class="hdr-n">Профиль</div></div>
+  <div class="scroll-full" style="padding-bottom:calc(var(--nav)+16px)">
+    <div id="prof-body"></div>
+  </div>
+  <div class="bnav">
+    <button class="ni" onclick="showTab('catalog')"><div class="ni-bar"></div><span class="ni-ico">🌸</span><span class="ni-lbl">Салоны</span></button>
+    <button class="ni" onclick="showTab('bookings')"><div class="ni-bar"></div><span class="ni-ico">📋</span><span class="ni-lbl">Записи</span></button>
+    <button class="ni on" onclick="showTab('profile')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- BOOKING DETAIL MODAL -->
+<div class="modal" id="m-bkdetail">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title">Запись</div>
+    <div id="bkdetail-body"></div>
+  </div>
+</div>
+
+<!-- EDIT NAME MODAL -->
+<div class="modal" id="m-editname">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title">Изменить имя</div>
+    <div class="fg" style="margin-bottom:16px">
+      <div class="fr">
+        <div class="fld"><label>Имя</label><input type="text" id="en-fname" placeholder="Имя"></div>
+        <div class="fld"><label>Фамилия</label><input type="text" id="en-lname" placeholder="Фамилия"></div>
+      </div>
+    </div>
+    <button class="btn btn-acc" onclick="saveName()">Сохранить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-editname')">Отмена</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONSTANTS ──
+const WD = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+const CAT_ICONS = {hair:'✂️',nails:'💅',brows:'👁️',skin:'🌿',barber:'🪒',massage:'💆',other:'⭐'};
+const STATUS_L = {pending:'Ожидает',confirmed:'Подтверждено',done:'Завершено',cancelled:'Отменено'};
+const STATUS_C = {pending:'bd-wait',confirmed:'bd-conf',done:'bd-done',cancelled:'bd-canc'};
+const AV_COLS = ['#2dd4bf','#c084fc','#fb7185','#fbbf24','#4ade80','#60a5fa'];
+
+// ── STORAGE ──
+const ls = {
+  get: k => { try { return JSON.parse(localStorage.getItem('zapcli_'+k)) } catch { return null } },
+  set: (k,v) => { try { localStorage.setItem('zapcli_'+k, JSON.stringify(v)) } catch {} },
+  del: k => localStorage.removeItem('zapcli_'+k)
+};
+
+// ── FIREBASE ──
+let FB = null;
+window.addEventListener('fbReady', async () => {
+  if (window._fbReady && window._FB) {
+    FB = window._FB;
+    try { await FB.signInAnonymously(FB.auth); } catch {}
+  }
+}, { once: true });
+
+async function fbGet(col, id) {
+  if (!FB) return ls.get(col+'_'+id);
+  try { const d = await FB.getDoc(FB.doc(FB.db,col,id)); return d.exists() ? d.data() : null; }
+  catch { return null; }
+}
+async function fbSet(col, id, data) {
+  ls.set(col+'_'+id, data);
+  if (!FB) return;
+  try { await FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}); } catch(e) { console.warn(e); }
+}
+async function fbQuery(col, ...conditions) {
+  if (!FB) return [];
+  try {
+    let q = FB.collection(FB.db, col);
+    const constraints = conditions.map(([f,op,v]) => FB.where(f,op,v));
+    q = FB.query(q, ...constraints);
+    const snap = await FB.getDocs(q);
+    return snap.docs.map(d => ({id: d.id, ...d.data()}));
+  } catch(e) { console.warn(e); return []; }
+}
+
+// ── TELEGRAM ──
+const tg = window.Telegram?.WebApp || {
+  ready:()=>{}, expand:()=>{},
+  initDataUnsafe:{user:{id:1,first_name:'Тест',last_name:'Пользователь'}},
+  HapticFeedback:{impactOccurred:()=>{}},
+  showConfirm:(t,cb)=>cb(confirm(t))
+};
+tg.ready(); tg.expand();
+
+// ── STATE ──
+let UID = null, USER = null, LINK = null;
+let ALL_SALONS = [], ALL_CATS = [];
+let curSalonId = null, curSalon = null, curServices = [], curMasters = [];
+let wizStep = 0;
+let wiz = { service: null, master: null, date: null, time: null };
+const WIZ_TITLES = ['Выберите услугу','Выберите мастера','Выберите дату','Выберите время','Подтверждение'];
+
+// ── UTILS ──
+const g = id => document.getElementById(id);
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function todayStr() { return dateStr(new Date()); }
+function dateStr(d) { return d.toISOString().split('T')[0]; }
+function fmDate(s) {
+  if (!s) return '';
+  const d = new Date(s+'T00:00:00');
+  return d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
+}
+function fm(n) { return Number(n||0).toLocaleString('ru-RU'); }
+function avLetter(name) { return (name||'?')[0].toUpperCase(); }
+function isOpen(open, close) {
+  const now = new Date();
+  const [oh,om] = open.split(':').map(Number);
+  const [ch,cm] = close.split(':').map(Number);
+  const cur = now.getHours()*60+now.getMinutes();
+  return cur >= oh*60+om && cur < ch*60+cm;
+}
+
+// ── SCREENS ──
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = g(id); if (el) el.classList.add('active');
+}
+
+function showTab(tab) {
+  tg.HapticFeedback.impactOccurred('light');
+  if (tab === 'catalog') { renderCatalog(); showScreen('s-catalog'); }
+  else if (tab === 'bookings') { renderMyBookings(); showScreen('s-mybookings'); }
+  else if (tab === 'profile') { renderProfile(); showScreen('s-profile'); }
+}
+
+// ── MODAL ──
+function openModal(id) { g(id)?.classList.add('open'); }
+function closeModal(id) { g(id)?.classList.remove('open'); }
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal')) closeModal(e.target.id);
+});
+
+// ── TOAST ──
+let toastTimer;
+function showToast(msg, type='') {
+  const el = g('toast');
+  el.textContent = msg; el.className = `toast show${type?' '+type:''}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ── BOOT ──
+window.addEventListener('DOMContentLoaded', async () => {
+  await new Promise(r => {
+    if (window._fbReady !== undefined) return r();
+    window.addEventListener('fbReady', r, { once: true });
+  });
+
+  const sp = new URLSearchParams(location.search);
+  if (sp.get('reset') === '1') {
+    ['uid','user','link'].forEach(k => ls.del(k));
+    history.replaceState(null, '', location.pathname);
+  }
+
+  const urlUid = sp.get('uid');
+  if (urlUid && urlUid.length === 64) {
+    UID = urlUid; ls.set('uid', urlUid);
+    history.replaceState(null, '', location.pathname);
+  } else {
+    UID = ls.get('uid');
+  }
+
+  setTimeout(boot, 2200);
+});
+
+async function boot() {
+  if (!UID) { showScreen('s-nouid'); return; }
+
+  LINK = await fbGet('user_links', UID);
+  USER = await fbGet('users', UID);
+
+  if (!USER) { showOnboard(); return; }
+
+  g('cli-av').textContent = avLetter(USER.firstName || USER.name);
+  await loadCatalog();
+  renderCatalog();
+  showScreen('s-catalog');
+  startHeartbeat();
+}
+
+// ── HEARTBEAT ──
+function startHeartbeat() {
+  const send = () => { if (UID) fbSet('users', UID, { webAppLastSeen: new Date().toISOString() }); };
+  send(); setInterval(send, 5000);
+}
+
+// ── ONBOARD ──
+function showOnboard() {
+  const tgU = tg.initDataUnsafe?.user;
+  g('ob-fname').value = tgU?.first_name || '';
+  g('ob-lname').value = tgU?.last_name || '';
+  const phone = LINK?.phone ? ('+' + String(LINK.phone).replace(/^\+/,'')) : '';
+  g('ob-phone').value = phone;
+  showScreen('s-onboard');
+}
+
+async function finishOnboard() {
+  const fname = g('ob-fname').value.trim();
+  if (!fname) { showToast('Введите ваше имя','e'); return; }
+  const lname = g('ob-lname').value.trim();
+  const tgU = tg.initDataUnsafe?.user;
+  USER = {
+    uid: UID,
+    tgId: String(tgU?.id || ''),
+    firstName: fname,
+    lastName: lname,
+    name: (fname + ' ' + lname).trim(),
+    phone: LINK?.phone || '',
+    role: 'client',
+    createdAt: new Date().toISOString()
+  };
+  await fbSet('users', UID, USER);
+  g('cli-av').textContent = avLetter(fname);
+  showToast('Добро пожаловать! 🎉','s');
+  tg.HapticFeedback.impactOccurred('heavy');
+  await loadCatalog();
+  renderCatalog();
+  showScreen('s-catalog');
+  startHeartbeat();
+}
+
+// ── CATALOG ──
+async function loadCatalog() {
+  ALL_CATS = await fbQuery('categories', ['active','==',true]);
+  ALL_SALONS = await fbQuery('salons', ['status','==','approved'], ['onlineBooking','==',true]);
+  ls.set('salons', ALL_SALONS);
+}
+
+let activeCat = 'all', searchQ = '';
+function renderCatalog() {
+  // Category chips
+  const catEl = g('cat-filter');
+  catEl.innerHTML = `<div class="chip${activeCat==='all'?' on':''}" onclick="setCat('all')">Все</div>` +
+    (ALL_CATS.length ? ALL_CATS.map(c => `<div class="chip${activeCat===c.id?' on':''}" onclick="setCat('${c.id}')">${esc(c.icon||'')} ${esc(c.name)}</div>`).join('') :
+     Object.entries({barber:'🪒 Барбер',nails:'💅 Ногти',hair:'✂️ Волосы',skin:'🌿 Косметология',massage:'💆 Массаж',lashes:'👁️ Брови/Ресницы'})
+       .map(([id,name]) => `<div class="chip${activeCat===id?' on':''}" onclick="setCat('${id}')">${name}</div>`).join(''));
+
+  // Salon list
+  let salons = ALL_SALONS;
+  if (activeCat !== 'all') salons = salons.filter(s => s.bizType === activeCat || s.categoryId === activeCat);
+  if (searchQ) {
+    const q = searchQ.toLowerCase();
+    salons = salons.filter(s => (s.name||'').toLowerCase().includes(q) || (s.addr||'').toLowerCase().includes(q));
+  }
+
+  const el = g('salon-list');
+  if (!salons.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-ico">🔍</div><div class="empty-txt">Ничего не найдено</div></div>`;
+    return;
+  }
+  el.innerHTML = salons.map(s => salonCard(s)).join('');
+}
+
+function setCat(id) { activeCat = id; renderCatalog(); }
+function filterSalons(q) { searchQ = q; renderCatalog(); }
+
+function salonCard(s) {
+  const open = isOpen(s.open||'00:00', s.close||'23:59');
+  return `<div class="salon-card" onclick="openSalon('${s.id}')">
+    <div class="salon-cover" style="${s.cover||'background:var(--bg4)'}">
+      ${s.img ? `<img src="${s.img}" alt="">` : `<div class="salon-cover-ico">${s.icon||'✦'}</div>`}
+      <div class="salon-badge ${open?'sb-open':'sb-closed'}">${open?'Открыто':'Закрыто'}</div>
+    </div>
+    <div class="salon-body">
+      <div class="salon-name">${esc(s.name)}</div>
+      <div class="salon-type">${esc(s.typeName||s.bizType||'')}</div>
+      <div class="salon-meta">
+        ${s.addr ? `<div class="salon-m">📍 ${esc(s.addr)}</div>` : ''}
+        ${s.open ? `<div class="salon-m">🕐 ${s.open}–${s.close}</div>` : ''}
+        ${s.city ? `<div class="salon-m">🏙 ${esc(s.city)}</div>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── SALON DETAIL ──
+async function openSalon(id) {
+  curSalonId = id;
+  curSalon = ALL_SALONS.find(s => s.id === id) || await fbGet('salons', id);
+  if (!curSalon) return;
+
+  g('salon-hdr').textContent = curSalon.name;
+  g('salon-body').innerHTML = `<div class="spin-center"><div class="spinner"></div></div>`;
+  showScreen('s-salon');
+
+  const svcDoc = await fbGet('salon_services', id);
+  const mastDoc = await fbGet('salon_masters', id);
+  curServices = svcDoc?.services || [];
+  curMasters = mastDoc?.masters || [];
+
+  const open = isOpen(curSalon.open||'00:00', curSalon.close||'23:59');
+  g('salon-body').innerHTML = `
+    <div style="height:160px;display:flex;align-items:center;justify-content:center;font-size:60px;
+      ${curSalon.cover||'background:var(--bg4)'};position:relative;overflow:hidden">
+      ${curSalon.img ? `<img src="${curSalon.img}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0" alt="">` : `<span style="position:relative;z-index:1">${curSalon.icon||'✦'}</span>`}
+    </div>
+    <div style="padding:16px 20px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+        <div>
+          <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600;margin-bottom:4px">${esc(curSalon.name)}</div>
+          <div style="font-size:13px;color:var(--acc);font-weight:600">${esc(curSalon.typeName||'')}</div>
+        </div>
+        <span class="badge ${open?'bd-done':'bd-canc'}">${open?'Открыто':'Закрыто'}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:13px;color:var(--text2)">
+        ${curSalon.addr?`<div>📍 ${esc(curSalon.addr)}</div>`:''}
+        ${curSalon.open?`<div>🕐 ${curSalon.open} – ${curSalon.close}</div>`:''}
+        ${curSalon.phone?`<div>📞 ${esc(curSalon.phone)}</div>`:''}
+        ${curSalon.instagram?`<div>📸 ${esc(curSalon.instagram)}</div>`:''}
+      </div>
+
+      ${curMasters.length ? `
+        <div class="sec-hdr"><div class="sec-t">Мастера (${curMasters.length})</div></div>
+        <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;margin-bottom:16px;scrollbar-width:none">
+          ${curMasters.map((m,i) => `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;min-width:64px">
+            <div style="width:56px;height:56px;border-radius:50%;background:${AV_COLS[i%AV_COLS.length]};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff">${avLetter(m.name)}</div>
+            <div style="font-size:11px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${esc(m.name)}</div>
+            <div style="font-size:10px;color:var(--text3);text-align:center">${esc(m.spec||'')}</div>
+          </div>`).join('')}
+        </div>` : ''}
+
+      <div class="sec-hdr"><div class="sec-t">Услуги (${curServices.length})</div></div>
+      ${curServices.map(svc => `
+        <div class="svc-item" onclick="startBooking('${svc.id}')">
+          <div class="svc-ico">${CAT_ICONS[svc.cat]||'✦'}</div>
+          <div class="svc-info">
+            <div class="svc-name">${esc(svc.name)}</div>
+            <div class="svc-dur">${svc.dur} мин</div>
+          </div>
+          <div class="svc-price">${fm(svc.price)}₸</div>
+        </div>`).join('')}
+
+      <button class="btn btn-acc" style="margin-top:16px" onclick="startBooking(null)">Записаться</button>
+    </div>`;
+}
+
+// ── BOOKING WIZARD ──
+function startBooking(svcId) {
+  wiz = { service: null, master: null, date: todayStr(), time: null };
+  if (svcId) wiz.service = curServices.find(s => s.id === svcId) || null;
+  wizStep = wiz.service ? 1 : 0;
+  renderWiz();
+  showScreen('s-booking');
+}
+
+function bookingBack() {
+  if (wizStep === 0) { showScreen('s-salon'); return; }
+  wizStep--;
+  if (wizStep === 0 && wiz.service) wizStep = 0;
+  renderWiz();
+}
+
+function renderWiz() {
+  const totalSteps = 5;
+  g('wiz-dots').innerHTML = Array.from({length:totalSteps},(_,i) =>
+    `<div class="wiz-step${i<wizStep?' done':i===wizStep?' active':''}"></div>`).join('');
+  g('bk-hdr-title').textContent = WIZ_TITLES[wizStep] || 'Запись';
+  if (wizStep === 0) renderWizServices();
+  else if (wizStep === 1) renderWizMasters();
+  else if (wizStep === 2) renderWizDate();
+  else if (wizStep === 3) renderWizTime();
+  else if (wizStep === 4) renderWizConfirm();
+}
+
+function renderWizServices() {
+  g('wiz-body').innerHTML = curServices.map(s => `
+    <div class="svc-item${wiz.service?.id===s.id?' sel':''}" onclick="selService('${s.id}')">
+      <div class="svc-ico">${CAT_ICONS[s.cat]||'✦'}</div>
+      <div class="svc-info"><div class="svc-name">${esc(s.name)}</div><div class="svc-dur">${s.dur} мин</div></div>
+      <div class="svc-price">${fm(s.price)}₸</div>
+    </div>`).join('');
+}
+
+function selService(id) {
+  wiz.service = curServices.find(s => s.id === id);
+  wizStep = 1; renderWiz();
+}
+
+function renderWizMasters() {
+  const avail = curMasters.length ? curMasters : [];
+  g('wiz-body').innerHTML = avail.map((m,i) => `
+    <div class="master-opt${wiz.master?.id===m.id?' sel':''}" onclick="selMaster('${m.id}')">
+      <div class="master-av" style="background:${AV_COLS[i%AV_COLS.length]}">${avLetter(m.name)}</div>
+      <div class="master-info">
+        <div class="master-name">${esc(m.name)}</div>
+        <div class="master-spec">${esc(m.spec||'')} · ${m.open||'09:00'}–${m.close||'19:00'}</div>
+      </div>
+    </div>`).join('');
+}
+
+function selMaster(id) {
+  wiz.master = curMasters.find(m => m.id === id);
+  wizStep = 2; renderWiz();
+}
+
+function renderWizDate() {
+  const today = new Date();
+  let html = '<div class="cal-strip" id="wiz-cal">';
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(today); d.setDate(today.getDate()+i);
+    const ds = dateStr(d);
+    const isTd = i === 0;
+    const isSel = ds === wiz.date;
+    html += `<div class="cal-day${isSel?' on':''}${isTd?' today':''}" onclick="selDate('${ds}')">
+      <div class="cal-wd">${WD[d.getDay()]}</div>
+      <div class="cal-d">${d.getDate()}</div>
+    </div>`;
+  }
+  html += '</div>';
+  html += `<button class="btn btn-acc" onclick="wizStep=3;renderWiz()" style="margin-top:8px">Далее →</button>`;
+  g('wiz-body').innerHTML = html;
+  setTimeout(() => g('wiz-cal')?.querySelector('.today')?.scrollIntoView({inline:'center',behavior:'smooth'}), 80);
+}
+
+function selDate(ds) {
+  wiz.date = ds;
+  document.querySelectorAll('#wiz-cal .cal-day').forEach(el => el.classList.remove('on'));
+  event.currentTarget.classList.add('on');
+}
+
+async function renderWizTime() {
+  g('wiz-body').innerHTML = `<div class="spin-center"><div class="spinner"></div></div>`;
+  const master = wiz.master;
+  const dur = wiz.service?.dur || 60;
+
+  // Load existing bookings for this master on this date
+  let existing = [];
+  if (FB) {
+    try {
+      existing = await fbQuery('bookings',
+        ['bizId','==',curSalonId],
+        ['masterId','==',master?.id||'m0'],
+        ['date','==',wiz.date],
+        ['status','!=','cancelled']
+      );
+    } catch {}
+  }
+
+  const open = master?.open || curSalon?.open || '09:00';
+  const close = master?.close || curSalon?.close || '19:00';
+  const slots = calcSlots(open, close, dur, existing);
+
+  const isPast = wiz.date < todayStr();
+  if (isPast) { g('wiz-body').innerHTML = `<div class="empty"><div class="empty-ico">📅</div><div class="empty-txt">Эта дата уже прошла</div></div>`; return; }
+
+  g('wiz-body').innerHTML = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(wiz.date)}</div>
+    <div class="time-grid">
+      ${slots.map(s => `<div class="ts${s.busy?' busy':''}${wiz.time===s.time?' on':''}" onclick="selTime('${s.time}')">${s.time}</div>`).join('')}
+    </div>
+    ${!slots.filter(s=>!s.busy).length ? `<div class="empty"><div class="empty-ico">😔</div><div class="empty-txt">На этот день все записи заняты</div></div>` : ''}
+  `;
+}
+
+function calcSlots(open, close, dur, existing) {
+  const [sh,sm] = open.split(':').map(Number);
+  const [eh,em] = close.split(':').map(Number);
+  let cur = sh*60+sm;
+  const end = eh*60+em;
+  const slots = [];
+  while (cur + dur <= end) {
+    const h = String(Math.floor(cur/60)).padStart(2,'0');
+    const m = String(cur%60).padStart(2,'0');
+    const time = `${h}:${m}`;
+    const busy = existing.some(b => {
+      const [bh,bm] = b.time.split(':').map(Number);
+      const bs = bh*60+bm, be = bs + (b.dur||60);
+      return cur < be && cur+dur > bs;
+    });
+    slots.push({ time, busy });
+    cur += 30;
+  }
+  return slots;
+}
+
+function selTime(t) {
+  wiz.time = t;
+  wizStep = 4; renderWiz();
+}
+
+function renderWizConfirm() {
+  g('wiz-body').innerHTML = `
+    <div class="bconf">
+      <div class="bc-row"><div class="bc-ico">🏠</div><div><div class="bc-lbl">Салон</div><div class="bc-val">${esc(curSalon.name)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(wiz.service?.name)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">${esc(wiz.master?.name||'Любой')}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(wiz.date)}, ${wiz.time}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(wiz.service?.price)}₸ · ${wiz.service?.dur} мин</div></div></div>
+    </div>
+    <button class="btn btn-acc" onclick="confirmBooking()">Подтвердить запись</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="showScreen('s-salon')">Отмена</button>
+  `;
+}
+
+async function confirmBooking() {
+  if (!UID || !wiz.service || !wiz.date || !wiz.time) return;
+  const btn = document.querySelector('#wiz-body .btn-acc');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохранение...'; }
+
+  const id = 'bk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+  const booking = {
+    id, bizId: curSalonId, salonName: curSalon.name,
+    clientId: UID, clientName: USER?.name || USER?.firstName || 'Клиент',
+    clientPhone: USER?.phone || LINK?.phone || '',
+    masterId: wiz.master?.id || 'm0', masterName: wiz.master?.name || 'Мастер',
+    serviceId: wiz.service.id, serviceName: wiz.service.name,
+    price: wiz.service.price, dur: wiz.service.dur,
+    date: wiz.date, time: wiz.time, status: 'pending', note: '',
+    createdAt: new Date().toISOString(), createdBy: 'client'
+  };
+
+  await fbSet('bookings', id, booking);
+  tg.HapticFeedback.impactOccurred('heavy');
+  showToast('Запись создана! 🎉','s');
+  renderMyBookings();
+  showTab('bookings');
+}
+
+// ── MY BOOKINGS ──
+async function renderMyBookings() {
+  g('mybk-list').innerHTML = `<div class="spin-center"><div class="spinner"></div></div>`;
+  let bookings = [];
+  if (FB) bookings = await fbQuery('bookings', ['clientId','==',UID]);
+  else bookings = ls.get('my_bookings') || [];
+
+  bookings.sort((a,b) => {
+    const da = (a.date||'')+(a.time||''), db = (b.date||'')+(b.time||'');
+    return db.localeCompare(da);
+  });
+
+  const pip = g('bk-pip');
+  const upcoming = bookings.filter(b => b.date >= todayStr() && b.status !== 'cancelled' && b.status !== 'done');
+  if (pip) pip.classList.toggle('vis', upcoming.length > 0);
+
+  if (!bookings.length) {
+    g('mybk-list').innerHTML = `<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Вы ещё не записывались ни в один салон</div></div>`;
+    return;
+  }
+
+  g('mybk-list').innerHTML = bookings.map(b => `
+    <div class="bk-card" onclick="openBkDetail('${b.id}')">
+      <div class="bk-hdr">
+        <div>
+          <div class="bk-salon">${esc(b.salonName)}</div>
+          <div class="bk-date">${fmDate(b.date)}, ${b.time||''}</div>
+        </div>
+        <span class="badge ${STATUS_C[b.status]||'bd-wait'}">${STATUS_L[b.status]||b.status}</span>
+      </div>
+      <div class="bk-row">💎 ${esc(b.serviceName)}</div>
+      <div class="bk-row">👤 ${esc(b.masterName)}</div>
+      <div class="bk-price">${fm(b.price)}₸</div>
+    </div>`).join('');
+}
+
+let curBkId = null;
+async function openBkDetail(id) {
+  curBkId = id;
+  const booking = await fbGet('bookings', id);
+  if (!booking) return;
+  const canCancel = booking.status === 'pending' || booking.status === 'confirmed';
+  g('bkdetail-body').innerHTML = `
+    <div class="bconf">
+      <div class="bc-row"><div class="bc-ico">🏠</div><div><div class="bc-lbl">Салон</div><div class="bc-val">${esc(booking.salonName)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(booking.serviceName)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">${esc(booking.masterName)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(booking.date)}, ${booking.time}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(booking.price)}₸</div></div></div>
+    </div>
+    <div style="margin-bottom:12px"><span class="badge ${STATUS_C[booking.status]||'bd-wait'}" style="font-size:13px">${STATUS_L[booking.status]||booking.status}</span></div>
+    ${canCancel ? `<button class="btn btn-rose" onclick="cancelBooking('${id}')">Отменить запись</button>` : ''}
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-bkdetail')">Закрыть</button>
+  `;
+  openModal('m-bkdetail');
+}
+
+async function cancelBooking(id) {
+  tg.showConfirm('Отменить запись?', async yes => {
+    if (!yes) return;
+    await fbSet('bookings', id, { status: 'cancelled' });
+    closeModal('m-bkdetail');
+    showToast('Запись отменена');
+    renderMyBookings();
+  });
+}
+
+// ── PROFILE ──
+function renderProfile() {
+  const name = USER?.name || USER?.firstName || '—';
+  const phone = USER?.phone || LINK?.phone || '—';
+  g('prof-body').innerHTML = `
+    <div class="prof-banner">
+      <div class="prof-av">${avLetter(name)}</div>
+      <div>
+        <div class="prof-n">${esc(name)}</div>
+        <div class="prof-meta">${esc(phone)}</div>
+        <div style="font-size:11px;color:var(--acc);font-weight:700;margin-top:4px">Клиент</div>
+      </div>
+    </div>
+    <div class="menu-list">
+      <button class="menu-item" onclick="openEditName()">
+        <div class="menu-ico mi-t">✏️</div>
+        <div class="menu-txt">Изменить имя</div>
+        <span class="menu-arr">›</span>
+      </button>
+    </div>
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">
+      Zap is... · v1.0<br>UID: <span style="font-family:var(--mono)">${(UID||'').slice(0,12)}...</span>
+    </div>
+  `;
+}
+
+function openEditName() {
+  g('en-fname').value = USER?.firstName || '';
+  g('en-lname').value = USER?.lastName || '';
+  openModal('m-editname');
+}
+
+async function saveName() {
+  const fname = g('en-fname').value.trim();
+  if (!fname) { showToast('Введите имя','e'); return; }
+  const lname = g('en-lname').value.trim();
+  USER.firstName = fname;
+  USER.lastName = lname;
+  USER.name = (fname+' '+lname).trim();
+  await fbSet('users', UID, { firstName: fname, lastName: lname, name: USER.name });
+  closeModal('m-editname');
+  showToast('Имя обновлено','s');
+  renderProfile();
+}
+</script>
+</body>
+</html>

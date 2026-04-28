@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Zap is... — Мастер</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, addDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+const cfg={apiKey:"AIzaSyD6wnCYIGciW_VRujcxlis7HEgGfWC6vOA",authDomain:"telegram-crm-85b05.firebaseapp.com",projectId:"telegram-crm-85b05",storageBucket:"telegram-crm-85b05.firebasestorage.app",messagingSenderId:"499866542692",appId:"1:499866542692:web:88eafe1e886c50bff03571",measurementId:"G-613KEDVY7V"};
+try{const app=initializeApp(cfg);const db=getFirestore(app);const auth=getAuth(app);window._FB={db,auth,doc,getDoc,setDoc,collection,query,where,getDocs,addDoc,signInAnonymously};window._fbReady=true;}catch{window._fbReady=false;}
+window.dispatchEvent(new Event('fbReady'));
+</script>
+<style>
+:root{
+  --bg:#0e0e12;--bg2:#141418;--bg3:#1a1a20;--bg4:#22222a;
+  --card:#17171d;--border:#252530;--border2:#303040;
+  --acc:#fbbf24;--acc2:#d97706;--acc3:rgba(251,191,36,.12);
+  --purple:#c084fc;--purple2:rgba(192,132,252,.15);
+  --teal:#2dd4bf;--teal2:rgba(45,212,191,.15);
+  --rose:#fb7185;--rose2:rgba(251,113,133,.12);
+  --green:#4ade80;--green2:rgba(74,222,128,.12);
+  --text:#f0f0f8;--text2:#8888a0;--text3:#44445a;
+  --r:14px;--rsm:10px;--nav:72px;
+  --ease:.28s cubic-bezier(.4,0,.2,1);
+  --spring:.38s cubic-bezier(.34,1.56,.64,1);
+  --mono:'DM Mono',monospace
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Manrope',sans-serif}
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg);
+  opacity:0;pointer-events:none;transform:translateY(16px);
+  transition:opacity var(--ease),transform var(--ease);overflow:hidden}
+.screen.active{opacity:1;pointer-events:all;transform:none}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+#s-splash{align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 35%,rgba(251,191,36,.15) 0%,transparent 65%),var(--bg)}
+.splash-logo{width:96px;height:96px;border-radius:28px;background:linear-gradient(135deg,#fbbf24,#d97706);display:flex;align-items:center;justify-content:center;font-size:46px;animation:lp 2.5s ease-in-out infinite;box-shadow:0 0 0 1px rgba(251,191,36,.3),0 20px 60px rgba(251,191,36,.4)}
+@keyframes lp{0%,100%{box-shadow:0 0 0 1px rgba(251,191,36,.3),0 20px 50px rgba(251,191,36,.3)}50%{box-shadow:0 0 0 2px rgba(251,191,36,.5),0 24px 70px rgba(251,191,36,.55)}}
+.splash-name{font-family:'Playfair Display',serif;font-size:32px;font-weight:600;margin-top:20px}
+.splash-tag{font-size:11px;color:var(--text2);margin-top:5px;letter-spacing:1.2px;text-transform:uppercase}
+.splash-bar{width:160px;height:3px;background:var(--bg4);border-radius:2px;margin-top:52px;overflow:hidden}
+.splash-prog{height:100%;background:linear-gradient(90deg,var(--acc),var(--purple));border-radius:2px;animation:prog 2.3s ease forwards}
+@keyframes prog{from{width:0}to{width:100%}}
+.fg{display:flex;flex-direction:column;gap:10px}
+.fr{display:flex;gap:10px}
+.fld{flex:1;position:relative}
+.fld label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:.3px}
+.fld input,.fld select,.fld textarea{width:100%;padding:13px 15px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);color:var(--text);font-family:'Manrope',sans-serif;font-size:15px;outline:none;transition:border-color var(--ease);-webkit-appearance:none}
+.fld input:focus,.fld select:focus{border-color:var(--acc);background:var(--bg4)}
+.fld input::placeholder{color:var(--text3)}
+.fld textarea{resize:none;min-height:64px;line-height:1.5}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:15px 20px;border-radius:var(--r);border:none;cursor:pointer;font-family:'Manrope',sans-serif;font-size:15px;font-weight:700;transition:all var(--ease);width:100%}
+.btn:active{transform:scale(.97)}
+.btn-acc{background:linear-gradient(135deg,#fbbf24,#d97706);color:#111;box-shadow:0 6px 20px rgba(251,191,36,.35)}
+.btn-out{background:transparent;color:var(--text);border:1.5px solid var(--border2)}
+.btn-out:active{background:var(--bg3)}
+.btn-sm{padding:9px 14px;font-size:12px;border-radius:var(--rsm);width:auto}
+.btn-ghost{background:var(--bg4);color:var(--text2);border:none;font-weight:500}
+.btn-rose{background:var(--rose2);color:var(--rose);border:1px solid rgba(251,113,133,.3)}
+.btn-green{background:var(--green2);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+.btn:disabled{opacity:.35;pointer-events:none}
+.mhdr{padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg)}
+.hdr-l{display:flex;flex-direction:column;gap:2px}
+.hdr-g{font-size:11px;color:var(--text3);font-weight:500;letter-spacing:.3px}
+.hdr-n{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;line-height:1.2}
+.avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#111;cursor:pointer;flex-shrink:0;background:linear-gradient(135deg,#fbbf24,#d97706)}
+.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px);-webkit-overflow-scrolling:touch}
+.scroll::-webkit-scrollbar{display:none}
+.scroll-full{flex:1;overflow-y:auto;padding:16px 20px 32px;-webkit-overflow-scrolling:touch}
+.scroll-full::-webkit-scrollbar{display:none}
+.bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nav);background:rgba(14,14,18,.93);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 4px;padding-bottom:env(safe-area-inset-bottom);z-index:100}
+.ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 4px;cursor:pointer;border:none;background:none;position:relative;border-radius:var(--rsm);transition:all var(--ease)}
+.ni-bar{position:absolute;top:0;left:50%;transform:translateX(-50%);width:20px;height:3px;border-radius:0 0 3px 3px;background:var(--acc);opacity:0;transition:opacity var(--ease)}
+.ni.on .ni-bar{opacity:1}
+.ni-ico{font-size:21px;transition:transform var(--spring)}
+.ni-lbl{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.3px;transition:color var(--ease);text-transform:uppercase}
+.ni.on .ni-lbl{color:var(--acc)}
+.ni.on .ni-ico{transform:scale(1.12)}
+.cal-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;scrollbar-width:none}
+.cal-strip::-webkit-scrollbar{display:none}
+.cal-day{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;padding:10px 6px;border-radius:var(--r);border:1.5px solid var(--border);cursor:pointer;transition:all var(--ease);flex-shrink:0;background:var(--bg3)}
+.cal-day.on{border-color:var(--acc);background:var(--acc3)}
+.cal-day.today .cal-d{color:var(--acc)}
+.cal-wd{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.cal-d{font-family:var(--mono);font-size:18px;font-weight:500;line-height:1}
+.cal-pip{width:5px;height:5px;border-radius:50%;background:var(--acc);margin-top:2px;opacity:0}
+.cal-day.has-appt .cal-pip{opacity:1}
+.appt-slot{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px;margin-bottom:10px;display:flex;gap:12px;cursor:pointer;transition:background var(--ease);animation:fadeUp .3s ease both}
+.appt-slot:active{background:var(--bg4)}
+.appt-time{display:flex;flex-direction:column;align-items:center;min-width:46px}
+.appt-t1{font-family:var(--mono);font-size:15px;font-weight:500}
+.appt-t2{font-family:var(--mono);font-size:11px;color:var(--text3)}
+.appt-div{width:1px;background:var(--border2);margin:0 2px}
+.appt-info{flex:1;min-width:0}
+.appt-client{font-size:14px;font-weight:700;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.appt-svc{font-size:12px;color:var(--text2);margin-bottom:5px}
+.appt-r{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.appt-price{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--acc)}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.bd-wait{background:var(--acc3);color:var(--acc)}
+.bd-conf{background:var(--purple2);color:var(--purple)}
+.bd-done{background:var(--green2);color:var(--green)}
+.bd-canc{background:var(--rose2);color:var(--rose)}
+.dot-p{width:6px;height:6px;border-radius:50%;background:currentColor;animation:dp 1.4s ease-in-out infinite}
+@keyframes dp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
+.wiz-steps{display:flex;gap:6px;margin-bottom:20px}
+.wiz-step{flex:1;height:3px;border-radius:2px;background:var(--border);transition:background var(--ease)}
+.wiz-step.done{background:var(--acc)}.wiz-step.active{background:linear-gradient(90deg,var(--acc2),var(--purple))}
+.svc-item{background:var(--bg3);border-radius:var(--r);border:1.5px solid var(--border);padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;transition:all var(--ease);cursor:pointer}
+.svc-item.sel{border-color:var(--acc);background:var(--acc3)}
+.svc-item:active{transform:scale(.98)}
+.svc-ico{width:40px;height:40px;border-radius:var(--rsm);background:var(--acc3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.svc-info{flex:1;min-width:0}
+.svc-name{font-size:14px;font-weight:600;margin-bottom:3px}
+.svc-dur{font-family:var(--mono);font-size:12px;color:var(--text2)}
+.svc-price{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--acc);flex-shrink:0}
+.time-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.ts{padding:11px 6px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);text-align:center;font-family:var(--mono);font-size:13px;font-weight:500;cursor:pointer;transition:all var(--ease);color:var(--text2)}
+.ts.on{border-color:var(--acc);background:var(--acc3);color:var(--acc)}
+.ts.busy{opacity:.25;pointer-events:none;text-decoration:line-through}
+.ts:active:not(.busy){transform:scale(.95)}
+.bconf{border-radius:var(--r);border:1px solid rgba(251,191,36,.2);padding:16px;margin-bottom:16px;background:linear-gradient(135deg,var(--acc3),rgba(192,132,252,.07))}
+.bc-row{display:flex;align-items:flex-start;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)}
+.bc-row:last-child{border-bottom:none}
+.bc-ico{font-size:17px;width:26px;text-align:center;flex-shrink:0;margin-top:1px}
+.bc-lbl{font-size:11px;color:var(--text2);margin-bottom:2px;font-weight:600;letter-spacing:.2px}
+.bc-val{font-size:14px;font-weight:600}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;z-index:200;opacity:0;pointer-events:none;transition:opacity var(--ease);backdrop-filter:blur(6px)}
+.modal.open{opacity:1;pointer-events:all}
+.modal-sheet{width:100%;background:var(--bg2);border-radius:24px 24px 0 0;border-top:1px solid var(--border);padding:0 20px 40px;transform:translateY(100%);transition:transform .38s cubic-bezier(.4,0,.2,1);max-height:90vh;overflow-y:auto}
+.modal.open .modal-sheet{transform:none}
+.modal-pill{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:12px auto 18px}
+.modal-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:16px}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-110px);background:var(--bg3);border:1px solid var(--border);border-radius:var(--rsm);padding:11px 20px;font-size:14px;font-weight:600;z-index:300;transition:transform .35s cubic-bezier(.4,0,.2,1);white-space:nowrap;max-width:92vw;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.s{border-color:rgba(74,222,128,.4)}.toast.e{border-color:rgba(251,113,133,.4)}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:44px 20px;text-align:center;gap:10px}
+.empty-ico{font-size:44px;opacity:.25}
+.empty-txt{color:var(--text2);font-size:14px;line-height:1.6}
+.spin-center{display:flex;align-items:center;justify-content:center;padding:48px}
+.spinner{width:32px;height:32px;border:2.5px solid var(--border2);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
+.menu-list{display:flex;flex-direction:column;gap:2px;margin-bottom:20px}
+.menu-item{display:flex;align-items:center;gap:14px;padding:15px 16px;background:var(--bg3);border-radius:var(--rsm);cursor:pointer;transition:background var(--ease);border:none;width:100%;text-align:left;color:var(--text)}
+.menu-item:active{background:var(--bg4)}
+.menu-ico{width:36px;height:36px;border-radius:var(--rsm);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.mi-a{background:var(--acc3)}.mi-t{background:var(--teal2)}.mi-r{background:var(--rose2)}
+.menu-txt{flex:1;font-size:15px;font-weight:500}
+.menu-arr{color:var(--text3)}
+.sec-t{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px}
+.invite-card{background:var(--bg3);border-radius:var(--r);border:1.5px solid rgba(251,191,36,.3);padding:16px;margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<div class="screen active" id="s-splash">
+  <div style="display:flex;flex-direction:column;align-items:center">
+    <div class="splash-logo">✂️</div>
+    <div class="splash-name">Zap is...</div>
+    <div class="splash-tag">Master Panel</div>
+    <div class="splash-bar"><div class="splash-prog"></div></div>
+  </div>
+</div>
+
+<div class="screen" id="s-nouid">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:32px">
+    <div style="font-size:56px">🔗</div>
+    <div style="font-family:'Playfair Display',serif;font-size:24px;font-weight:600">Войдите через Telegram</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6">Откройте бота <b style="color:var(--acc)">@ZapMasterBot</b> и нажмите /start</div>
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px;font-family:var(--mono);font-size:14px;color:var(--acc)">@ZapMasterBot</div>
+  </div>
+</div>
+
+<!-- NO SALON -->
+<div class="screen" id="s-nosalón">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:32px">
+    <div style="font-size:56px">⏳</div>
+    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600">Нет привязки к салону</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6">Вас ещё не добавили в салон. Попросите администратора салона добавить ваш номер телефона.</div>
+    <div id="invite-list-screen" style="width:100%"></div>
+    <button class="btn btn-out" onclick="checkInvites()">🔄 Проверить приглашения</button>
+  </div>
+</div>
+
+<!-- SCHEDULE -->
+<div class="screen" id="s-sched">
+  <div class="mhdr">
+    <div class="hdr-l">
+      <div class="hdr-g">Расписание мастера</div>
+      <div class="hdr-n" id="mst-name">—</div>
+    </div>
+    <div class="avatar" id="mst-av" onclick="showTab('prof')">М</div>
+  </div>
+  <div class="scroll">
+    <div class="cal-strip" id="m-cal"></div>
+    <div id="m-sched-list"></div>
+  </div>
+  <div class="bnav">
+    <button class="ni on" onclick="showTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Расписание</span></button>
+    <button class="ni" onclick="showTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- PROFILE -->
+<div class="screen" id="s-prof">
+  <div class="mhdr"><div class="hdr-n">Профиль</div></div>
+  <div class="scroll-full" style="padding-bottom:calc(var(--nav)+16px)">
+    <div id="prof-body"></div>
+  </div>
+  <div class="bnav">
+    <button class="ni" onclick="showTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Расписание</span></button>
+    <button class="ni on" onclick="showTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
+  </div>
+</div>
+
+<!-- BOOKING DETAIL -->
+<div class="modal" id="m-bkdetail">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title">Запись</div>
+    <div id="bkdetail-body"></div>
+  </div>
+</div>
+
+<!-- NEW BOOKING -->
+<div class="modal" id="m-newbk">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title">Новая запись</div>
+    <div class="wiz-steps" id="nb-steps"></div>
+    <div id="nb-body"></div>
+  </div>
+</div>
+
+<!-- INVITE -->
+<div class="modal" id="m-invite">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title">Приглашение в салон</div>
+    <div id="invite-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const WD=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+const CAT_ICONS={hair:'✂️',nails:'💅',brows:'👁️',skin:'🌿',barber:'🪒',massage:'💆',other:'⭐'};
+const STATUS_L={pending:'Ожидает',confirmed:'Подтверждено',done:'Завершено',cancelled:'Отменено'};
+const STATUS_C={pending:'bd-wait',confirmed:'bd-conf',done:'bd-done',cancelled:'bd-canc'};
+
+const ls={get:k=>{try{return JSON.parse(localStorage.getItem('zapmst_'+k))}catch{return null}},set:(k,v)=>{try{localStorage.setItem('zapmst_'+k,JSON.stringify(v))}catch{}},del:k=>localStorage.removeItem('zapmst_'+k)};
+
+let FB=null;
+window.addEventListener('fbReady',async()=>{if(window._fbReady&&window._FB){FB=window._FB;try{await FB.signInAnonymously(FB.auth);}catch{}}},{once:true});
+
+async function fbGet(col,id){if(!FB)return null;try{const d=await FB.getDoc(FB.doc(FB.db,col,id));return d.exists()?{id:d.id,...d.data()}:null;}catch{return null;}}
+async function fbSet(col,id,data){if(!FB)return;try{await FB.setDoc(FB.doc(FB.db,col,id),data,{merge:true});}catch(e){console.warn(e);}}
+async function fbQuery(col,...conds){if(!FB)return[];try{const q=FB.query(FB.collection(FB.db,col),...conds.map(([f,op,v])=>FB.where(f,op,v)));const snap=await FB.getDocs(q);return snap.docs.map(d=>({id:d.id,...d.data()}));}catch{return[];}}
+
+const tg=window.Telegram?.WebApp||{ready:()=>{},expand:()=>{},initDataUnsafe:{user:{id:1,first_name:'Тест'}},HapticFeedback:{impactOccurred:()=>{}},showConfirm:(t,cb)=>cb(confirm(t))};
+tg.ready();tg.expand();
+
+let UID=null,USER=null,LINK=null,BIZ=null,MY_MASTER=null;
+let BOOKINGS=[],SERVICES=[];
+let selDate=todayStr();
+let nbStep=0,nbData={};
+
+const g=id=>document.getElementById(id);
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function todayStr(){return dateStr(new Date());}
+function dateStr(d){return d.toISOString().split('T')[0];}
+function fmDate(s){if(!s)return'';const d=new Date(s+'T00:00:00');return d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'});}
+function fm(n){return Number(n||0).toLocaleString('ru-RU');}
+function avLetter(name){return(name||'?')[0].toUpperCase();}
+
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));g(id)?.classList.add('active');}
+function openModal(id){g(id)?.classList.add('open');}
+function closeModal(id){g(id)?.classList.remove('open');}
+document.addEventListener('click',e=>{if(e.target.classList.contains('modal'))closeModal(e.target.id);});
+let toastTimer;
+function showToast(msg,type=''){const el=g('toast');el.textContent=msg;el.className=`toast show${type?' '+type:''}`;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2800);}
+
+window.addEventListener('DOMContentLoaded',async()=>{
+  await new Promise(r=>{if(window._fbReady!==undefined)return r();window.addEventListener('fbReady',r,{once:true});});
+  const sp=new URLSearchParams(location.search);
+  const urlUid=sp.get('uid');
+  if(urlUid&&urlUid.length===64){UID=urlUid;ls.set('uid',urlUid);history.replaceState(null,'',location.pathname);}
+  else UID=ls.get('uid');
+  setTimeout(boot,2200);
+});
+
+async function boot(){
+  if(!UID){showScreen('s-nouid');return;}
+  LINK=await fbGet('user_links',UID);
+  USER=await fbGet('users',UID);
+  if(!USER){
+    const tgU=tg.initDataUnsafe?.user;
+    USER={uid:UID,tgId:String(tgU?.id||''),firstName:tgU?.first_name||'Мастер',name:tgU?.first_name||'Мастер',phone:LINK?.phone||'',role:'master',createdAt:new Date().toISOString()};
+    await fbSet('users',UID,USER);
+  }
+  // Find salon where this master is listed
+  const phone=USER.phone||LINK?.phone||'';
+  await findMySalon(phone);
+  startHeartbeat();
+}
+
+async function findMySalon(phone){
+  // Look for salons where masters array contains this uid or phone
+  const salons=await fbQuery('salons',['status','==','approved']);
+  for(const s of salons){
+    const mstDoc=await fbGet('salon_masters',s.id);
+    const masters=mstDoc?.masters||[];
+    const me=masters.find(m=>m.uid===UID||m.phone===phone||m.phone===phone.replace(/^\+/,''));
+    if(me){BIZ=s;MY_MASTER=me;break;}
+  }
+  if(!BIZ){
+    await checkInvites();
+    showScreen('s-nosalón');
+    return;
+  }
+  const svcDoc=await fbGet('salon_services',BIZ.id);
+  SERVICES=svcDoc?.services||[];
+  BOOKINGS=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id],['status','!=','cancelled']);
+  g('mst-name').textContent=MY_MASTER.name||USER.firstName;
+  g('mst-av').textContent=avLetter(MY_MASTER.name||USER.firstName);
+  renderSched();
+  showScreen('s-sched');
+}
+
+function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
+
+function showTab(tab){
+  tg.HapticFeedback.impactOccurred('light');
+  if(tab==='sched'){renderSched();showScreen('s-sched');}
+  else if(tab==='prof'){renderProf();showScreen('s-prof');}
+}
+
+// ── SCHEDULE ──
+function renderSched(){
+  renderCalStrip();
+  renderSchedList();
+}
+function renderCalStrip(){
+  const el=g('m-cal');if(!el)return;
+  const today=new Date();const days=[];
+  for(let i=-1;i<=13;i++){const d=new Date(today);d.setDate(today.getDate()+i);days.push(d);}
+  el.innerHTML=days.map(d=>{
+    const ds=dateStr(d);const hasA=BOOKINGS.some(b=>b.date===ds);
+    return `<div class="cal-day${ds===selDate?' on':''}${ds===todayStr()?' today':''}${hasA?' has-appt':''}" onclick="selDateFn('${ds}')">
+      <div class="cal-wd">${WD[d.getDay()]}</div><div class="cal-d">${d.getDate()}</div><div class="cal-pip"></div>
+    </div>`;
+  }).join('');
+  setTimeout(()=>el.querySelector('.today')?.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'}),80);
+}
+function selDateFn(ds){selDate=ds;renderCalStrip();renderSchedList();tg.HapticFeedback.impactOccurred('light');}
+function renderSchedList(){
+  const el=g('m-sched-list');if(!el)return;
+  const bks=BOOKINGS.filter(b=>b.date===selDate).sort((a,b)=>a.time.localeCompare(b.time));
+  if(!bks.length){el.innerHTML=`<div class="empty"><div class="empty-ico">📆</div><div class="empty-txt">На ${selDate===todayStr()?'сегодня':fmDate(selDate)} записей нет</div><button class="btn btn-sm btn-ghost" style="margin-top:12px" onclick="openNewBooking()">+ Добавить запись</button></div>`;return;}
+  el.innerHTML=bks.map(b=>apptCard(b)).join('')+`<button class="btn btn-out" style="margin-top:8px" onclick="openNewBooking()">+ Добавить запись</button>`;
+}
+
+function apptCard(b){
+  const[h,m]=b.time.split(':').map(Number);const em=h*60+m+(b.dur||60);
+  const eh=String(Math.floor(em/60)).padStart(2,'0');const emm=String(em%60).padStart(2,'0');
+  return `<div class="appt-slot" onclick="openBkDetail('${b.id}')">
+    <div class="appt-time"><div class="appt-t1">${b.time}</div><div class="appt-t2">${eh}:${emm}</div></div>
+    <div class="appt-div"></div>
+    <div class="appt-info">
+      <div class="appt-client">${esc(b.clientName)}</div>
+      <div class="appt-svc">${esc(b.serviceName)}</div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <span class="badge ${STATUS_C[b.status]||'bd-wait'}">${b.status==='pending'?'<span class="dot-p"></span>':''}${STATUS_L[b.status]||b.status}</span>
+        ${b.clientPhone?`<span style="font-size:11px;color:var(--text3)">${esc(b.clientPhone)}</span>`:''}
+      </div>
+    </div>
+    <div class="appt-r"><div class="appt-price">${fm(b.price)}₸</div><div style="font-family:var(--mono);font-size:11px;color:var(--text3)">${b.dur||60}мин</div></div>
+  </div>`;
+}
+
+async function openBkDetail(id){
+  const b=BOOKINGS.find(bk=>bk.id===id)||await fbGet('bookings',id);if(!b)return;
+  const canCancel=b.status==='pending'||b.status==='confirmed';
+  g('bkdetail-body').innerHTML=`
+    <div class="bconf">
+      <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Клиент</div><div class="bc-val">${esc(b.clientName)}</div><div style="font-size:12px;color:var(--text2)">${esc(b.clientPhone||'')}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(b.serviceName)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(b.date)}, ${b.time} (${b.dur}мин)</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(b.price)}₸</div></div></div>
+    </div>
+    <div style="margin-bottom:16px"><span class="badge ${STATUS_C[b.status]||'bd-wait'}" style="font-size:13px">${STATUS_L[b.status]||b.status}</span></div>
+    ${canCancel?`<button class="btn btn-rose" onclick="cancelBk('${b.id}')">Отменить запись</button>`:''}
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-bkdetail')">Закрыть</button>`;
+  openModal('m-bkdetail');
+}
+
+async function cancelBk(id){
+  tg.showConfirm('Отменить запись? Администратор получит уведомление.',async yes=>{
+    if(!yes)return;
+    const idx=BOOKINGS.findIndex(b=>b.id===id);if(idx>=0)BOOKINGS[idx].status='cancelled';
+    await fbSet('bookings',id,{status:'cancelled',cancelledBy:'master'});
+    closeModal('m-bkdetail');showToast('Запись отменена');renderSchedList();
+  });
+}
+
+// ── NEW BOOKING ──
+const NB_TITLES=['Клиент','Услуга','Дата','Время','Подтверждение'];
+function openNewBooking(){nbStep=0;nbData={date:selDate};renderNb();openModal('m-newbk');}
+function renderNb(){
+  g('nb-steps').innerHTML=NB_TITLES.map((_,i)=>`<div class="wiz-step${i<nbStep?' done':i===nbStep?' active':''}"></div>`).join('');
+  if(nbStep===0)renderNbClient();
+  else if(nbStep===1)renderNbSvc();
+  else if(nbStep===2)renderNbDate();
+  else if(nbStep===3)renderNbTime();
+  else if(nbStep===4)renderNbConfirm();
+}
+function renderNbClient(){
+  g('nb-body').innerHTML=`<div class="fg" style="margin-bottom:16px">
+    <div class="fld"><label>Имя клиента</label><input type="text" id="nb-cn" placeholder="Имя"></div>
+    <div class="fld"><label>Телефон</label><input type="tel" id="nb-cp" placeholder="+7..."></div>
+    <div class="fld"><label>Заметка</label><input type="text" id="nb-cnote" placeholder="Необязательно"></div>
+  </div>
+  <button class="btn btn-acc" onclick="nbNextClient()">Далее →</button>`;
+}
+function nbNextClient(){
+  const name=(g('nb-cn')?.value||'').trim();if(!name){showToast('Введите имя','e');return;}
+  nbData.client={name,phone:g('nb-cp')?.value||'',note:g('nb-cnote')?.value||''};
+  nbStep=1;renderNb();
+}
+function renderNbSvc(){
+  g('nb-body').innerHTML=SERVICES.map(s=>`<div class="svc-item${nbData.service?.id===s.id?' sel':''}" onclick="nbSelSvc('${s.id}')">
+    <div class="svc-ico">${CAT_ICONS[s.cat]||'✦'}</div>
+    <div class="svc-info"><div class="svc-name">${esc(s.name)}</div><div class="svc-dur">${s.dur}мин</div></div>
+    <div class="svc-price">${fm(s.price)}₸</div>
+  </div>`).join('');
+}
+function nbSelSvc(id){nbData.service=SERVICES.find(s=>s.id===id);nbStep=2;renderNb();}
+function renderNbDate(){
+  const today=new Date();let html=`<div class="cal-strip" id="nb-cal">`;
+  for(let i=0;i<30;i++){const d=new Date(today);d.setDate(today.getDate()+i);const ds=dateStr(d);
+    html+=`<div class="cal-day${(nbData.date||todayStr())===ds?' on':''}${i===0?' today':''}" onclick="nbSelDate('${ds}')"><div class="cal-wd">${WD[d.getDay()]}</div><div class="cal-d">${d.getDate()}</div></div>`;}
+  html+=`</div><button class="btn btn-acc" onclick="nbStep=3;renderNb()" style="margin-top:8px">Далее →</button>`;
+  g('nb-body').innerHTML=html;
+  if(!nbData.date)nbData.date=todayStr();
+  setTimeout(()=>g('nb-cal')?.querySelector('.today')?.scrollIntoView({inline:'center',behavior:'smooth'}),80);
+}
+function nbSelDate(ds){nbData.date=ds;document.querySelectorAll('#nb-cal .cal-day').forEach(el=>el.classList.remove('on'));event.currentTarget.classList.add('on');}
+async function renderNbTime(){
+  g('nb-body').innerHTML=`<div class="spin-center"><div class="spinner"></div></div>`;
+  const dur=nbData.service?.dur||60;
+  let existing=[];
+  try{existing=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id],['date','==',nbData.date],['status','!=','cancelled']);}catch{}
+  const open=MY_MASTER.open||'09:00',close=MY_MASTER.close||'19:00';
+  const slots=calcSlots(open,close,dur,existing);
+  g('nb-body').innerHTML=`<div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(nbData.date)}</div>
+    <div class="time-grid">${slots.map(s=>`<div class="ts${s.busy?' busy':''}${nbData.time===s.time?' on':''}" onclick="nbSelTime('${s.time}')">${s.time}</div>`).join('')}</div>`;
+}
+function nbSelTime(t){nbData.time=t;nbStep=4;renderNb();}
+function calcSlots(open,close,dur,existing){
+  const[sh,sm]=open.split(':').map(Number);const[eh,em]=close.split(':').map(Number);
+  let cur=sh*60+sm;const end=eh*60+em;const slots=[];
+  while(cur+dur<=end){
+    const h=String(Math.floor(cur/60)).padStart(2,'0');const m=String(cur%60).padStart(2,'0');const time=`${h}:${m}`;
+    const busy=existing.some(b=>{const[bh,bm]=b.time.split(':').map(Number);const bs=bh*60+bm,be=bs+(b.dur||60);return cur<be&&cur+dur>bs;});
+    slots.push({time,busy});cur+=30;
+  }
+  return slots;
+}
+function renderNbConfirm(){
+  g('nb-body').innerHTML=`<div class="bconf">
+    <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Клиент</div><div class="bc-val">${esc(nbData.client.name)}</div><div style="font-size:12px;color:var(--text2)">${esc(nbData.client.phone)}</div></div></div>
+    <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(nbData.service?.name)}</div></div></div>
+    <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата</div><div class="bc-val">${fmDate(nbData.date)}, ${nbData.time}</div></div></div>
+    <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Цена</div><div class="bc-val">${fm(nbData.service?.price)}₸</div></div></div>
+  </div>
+  <button class="btn btn-acc" onclick="saveNewBooking()">Создать запись</button>
+  <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-newbk')">Отмена</button>`;
+}
+async function saveNewBooking(){
+  const id='bk_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+  const bk={id,bizId:BIZ.id,salonName:BIZ.name,
+    clientId:'manual_'+Date.now(),clientName:nbData.client.name,clientPhone:nbData.client.phone,
+    masterId:MY_MASTER.id,masterName:MY_MASTER.name,
+    serviceId:nbData.service.id,serviceName:nbData.service.name,
+    price:nbData.service.price,dur:nbData.service.dur,
+    date:nbData.date,time:nbData.time,status:'confirmed',note:nbData.client.note||'',
+    createdAt:new Date().toISOString(),createdBy:'master'};
+  await fbSet('bookings',id,bk);
+  BOOKINGS.push(bk);
+  closeModal('m-newbk');showToast('Запись создана','s');
+  tg.HapticFeedback.impactOccurred('heavy');
+  renderSchedList();
+}
+
+// ── INVITES ──
+async function checkInvites(){
+  const phone=USER?.phone||LINK?.phone||'';
+  if(!phone)return;
+  const invites=await fbQuery('master_invites',['phone','==',phone],['status','==','pending']);
+  const el=g('invite-list-screen');
+  if(invites.length&&el){
+    el.innerHTML=invites.map(inv=>`<div class="invite-card">
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px">${esc(inv.salonName)}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Приглашает вас как мастера · ${esc(inv.spec||'')}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm btn-green" onclick="acceptInvite('${inv.id}')">✓ Принять</button>
+        <button class="btn btn-sm btn-rose" onclick="rejectInvite('${inv.id}')">✕ Отклонить</button>
+      </div>
+    </div>`).join('');
+  }
+  if(invites.length)openInviteModal(invites[0]);
+}
+function openInviteModal(inv){
+  g('invite-body').innerHTML=`<div style="background:var(--bg3);border-radius:var(--r);padding:16px;margin-bottom:16px">
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px">${esc(inv.salonName)}</div>
+    <div style="font-size:13px;color:var(--text2)">Специализация: ${esc(inv.spec||'не указана')}</div>
+    <div style="font-size:13px;color:var(--text2);margin-top:4px">Режим работы: ${esc(inv.open||'09:00')} – ${esc(inv.close||'19:00')}</div>
+  </div>
+  <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5">Если вы работаете в другом салоне, принятие этого приглашения автоматически переведёт вас в новый салон.</p>
+  <button class="btn btn-acc" onclick="acceptInvite('${inv.id}')">✓ Принять приглашение</button>
+  <button class="btn btn-out" style="margin-top:8px" onclick="rejectInvite('${inv.id}')">✕ Отклонить</button>
+  <button class="btn btn-ghost" style="margin-top:8px" onclick="closeModal('m-invite')">Позже</button>`;
+  openModal('m-invite');
+}
+async function acceptInvite(id){
+  const inv=await fbGet('master_invites',id);if(!inv)return;
+  await fbSet('master_invites',id,{status:'accepted'});
+  const mstDoc=await fbGet('salon_masters',inv.bizId);
+  const masters=mstDoc?.masters||[];
+  const newMaster={id:'m_'+UID,bizId:inv.bizId,uid:UID,phone:USER.phone||LINK?.phone||'',name:inv.name||USER.firstName,spec:inv.spec||'',open:inv.open||'09:00',close:inv.close||'19:00',color:masters.length%6};
+  masters.push(newMaster);
+  await fbSet('salon_masters',inv.bizId,{masters});
+  await fbSet('users',UID,{salonId:inv.bizId,role:'master'});
+  closeModal('m-invite');
+  showToast('Добро пожаловать в команду! 🎉','s');
+  tg.HapticFeedback.impactOccurred('heavy');
+  setTimeout(()=>location.reload(),1500);
+}
+async function rejectInvite(id){
+  await fbSet('master_invites',id,{status:'rejected'});
+  closeModal('m-invite');showToast('Приглашение отклонено');
+  g('invite-list-screen').innerHTML='';
+}
+
+// ── PROFILE ──
+function renderProf(){
+  const salon=BIZ;
+  const name=MY_MASTER?.name||USER?.firstName||'—';
+  g('prof-body').innerHTML=`
+    <div style="border-radius:var(--r);border:1px solid rgba(251,191,36,.2);padding:20px;margin-bottom:16px;display:flex;gap:16px;align-items:center;background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(192,132,252,.06))">
+      <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#fbbf24,#d97706);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#111">${avLetter(name)}</div>
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:19px;font-weight:600;margin-bottom:3px">${esc(name)}</div>
+        <div style="font-size:12px;color:var(--text2)">${esc(MY_MASTER?.spec||'Мастер')}</div>
+        <div style="font-size:11px;color:var(--acc);font-weight:700;margin-top:4px">✂️ Мастер</div>
+      </div>
+    </div>
+    ${salon?`<div style="background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px">Салон</div>
+      <div style="font-size:15px;font-weight:700">${esc(salon.name)}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:2px">${esc(salon.addr||'')}</div>
+      <div style="font-size:12px;color:var(--text2)">Режим работы: ${esc(MY_MASTER?.open||'09:00')} – ${esc(MY_MASTER?.close||'19:00')}</div>
+    </div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+      ${['today','week','month'].slice(0,2).map((p,i)=>{const bks=p==='today'?BOOKINGS.filter(b=>b.date===todayStr()):BOOKINGS;const done=bks.filter(b=>b.status==='done');const rev=done.reduce((s,b)=>s+Number(b.price),0);return `<div style="background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:16px"><div style="font-size:11px;color:var(--text2);margin-bottom:6px">${i===0?'Сегодня':'За всё время'}</div><div style="font-family:var(--mono);font-size:24px;font-weight:500">${done.length}</div><div style="font-size:11px;color:var(--acc);margin-top:2px">${i===0?'записей':'завершено'}</div></div>`;}).join('')}
+    </div>
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">Zap is... · v1.0 · Master</div>`;
+}
+</script>
+</body>
+</html>

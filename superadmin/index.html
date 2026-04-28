@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Zap is... — Суперадмин</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+const cfg={apiKey:"AIzaSyD6wnCYIGciW_VRujcxlis7HEgGfWC6vOA",authDomain:"telegram-crm-85b05.firebaseapp.com",projectId:"telegram-crm-85b05",storageBucket:"telegram-crm-85b05.firebasestorage.app",messagingSenderId:"499866542692",appId:"1:499866542692:web:88eafe1e886c50bff03571",measurementId:"G-613KEDVY7V"};
+try{const app=initializeApp(cfg);const db=getFirestore(app);const auth=getAuth(app);window._FB={db,auth,doc,getDoc,setDoc,updateDoc,collection,query,where,getDocs,deleteDoc,signInAnonymously};window._fbReady=true;}catch{window._fbReady=false;}
+window.dispatchEvent(new Event('fbReady'));
+</script>
+<style>
+:root{
+  --bg:#0e0e12;--bg2:#141418;--bg3:#1a1a20;--bg4:#22222a;
+  --card:#17171d;--border:#252530;--border2:#303040;
+  --acc:#60a5fa;--acc2:#3b82f6;--acc3:rgba(96,165,250,.15);
+  --purple:#c084fc;--purple2:rgba(192,132,252,.15);
+  --teal:#2dd4bf;--teal2:rgba(45,212,191,.15);
+  --amber:#fbbf24;--amber2:rgba(251,191,36,.12);
+  --rose:#fb7185;--rose2:rgba(251,113,133,.12);
+  --green:#4ade80;--green2:rgba(74,222,128,.12);
+  --text:#f0f0f8;--text2:#8888a0;--text3:#44445a;
+  --r:14px;--rsm:10px;--nav:72px;
+  --ease:.28s cubic-bezier(.4,0,.2,1);
+  --spring:.38s cubic-bezier(.34,1.56,.64,1);
+  --mono:'DM Mono',monospace
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Manrope',sans-serif}
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg);opacity:0;pointer-events:none;transform:translateY(16px);transition:opacity var(--ease),transform var(--ease);overflow:hidden}
+.screen.active{opacity:1;pointer-events:all;transform:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+#s-splash{align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 35%,rgba(96,165,250,.18) 0%,transparent 65%),var(--bg)}
+.splash-logo{width:96px;height:96px;border-radius:28px;background:linear-gradient(135deg,#60a5fa,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:46px;animation:lp 2.5s ease-in-out infinite;box-shadow:0 0 0 1px rgba(96,165,250,.3),0 20px 60px rgba(96,165,250,.4)}
+@keyframes lp{0%,100%{box-shadow:0 0 0 1px rgba(96,165,250,.3),0 20px 50px rgba(96,165,250,.3)}50%{box-shadow:0 0 0 2px rgba(96,165,250,.5),0 24px 70px rgba(96,165,250,.55)}}
+.splash-name{font-family:'Playfair Display',serif;font-size:32px;font-weight:600;margin-top:20px}
+.splash-tag{font-size:11px;color:var(--text2);margin-top:5px;letter-spacing:1.2px;text-transform:uppercase}
+.splash-bar{width:160px;height:3px;background:var(--bg4);border-radius:2px;margin-top:52px;overflow:hidden}
+.splash-prog{height:100%;background:linear-gradient(90deg,var(--acc),var(--purple));border-radius:2px;animation:prog 2.3s ease forwards}
+@keyframes prog{from{width:0}to{width:100%}}
+.fg{display:flex;flex-direction:column;gap:10px}
+.fr{display:flex;gap:10px}
+.fld{flex:1;position:relative}
+.fld label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:.3px}
+.fld input,.fld select{width:100%;padding:13px 15px;border-radius:var(--rsm);border:1.5px solid var(--border);background:var(--bg3);color:var(--text);font-family:'Manrope',sans-serif;font-size:15px;outline:none;transition:border-color var(--ease);-webkit-appearance:none}
+.fld input:focus,.fld select:focus{border-color:var(--acc);background:var(--bg4)}
+.fld input::placeholder{color:var(--text3)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:15px 20px;border-radius:var(--r);border:none;cursor:pointer;font-family:'Manrope',sans-serif;font-size:15px;font-weight:700;transition:all var(--ease);width:100%}
+.btn:active{transform:scale(.97)}
+.btn-acc{background:linear-gradient(135deg,#60a5fa,#3b82f6);color:#fff;box-shadow:0 6px 20px rgba(96,165,250,.35)}
+.btn-out{background:transparent;color:var(--text);border:1.5px solid var(--border2)}
+.btn-out:active{background:var(--bg3)}
+.btn-sm{padding:9px 14px;font-size:12px;border-radius:var(--rsm);width:auto}
+.btn-ghost{background:var(--bg4);color:var(--text2);border:none;font-weight:500}
+.btn-rose{background:var(--rose2);color:var(--rose);border:1px solid rgba(251,113,133,.3)}
+.btn-green{background:var(--green2);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+.btn-amber{background:var(--amber2);color:var(--amber);border:1px solid rgba(251,191,36,.3)}
+.btn:disabled{opacity:.35;pointer-events:none}
+.mhdr{padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg)}
+.hdr-l{display:flex;flex-direction:column;gap:2px}
+.hdr-g{font-size:11px;color:var(--text3);font-weight:500;letter-spacing:.3px}
+.hdr-n{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;line-height:1.2}
+.avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;cursor:pointer;flex-shrink:0;background:linear-gradient(135deg,#60a5fa,#3b82f6)}
+.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px);-webkit-overflow-scrolling:touch}
+.scroll::-webkit-scrollbar{display:none}
+.scroll-full{flex:1;overflow-y:auto;padding:16px 20px 32px;-webkit-overflow-scrolling:touch}
+.scroll-full::-webkit-scrollbar{display:none}
+.bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nav);background:rgba(14,14,18,.93);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 4px;padding-bottom:env(safe-area-inset-bottom);z-index:100}
+.ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 4px;cursor:pointer;border:none;background:none;position:relative;border-radius:var(--rsm);transition:all var(--ease)}
+.ni-bar{position:absolute;top:0;left:50%;transform:translateX(-50%);width:20px;height:3px;border-radius:0 0 3px 3px;background:var(--acc);opacity:0;transition:opacity var(--ease)}
+.ni.on .ni-bar{opacity:1}
+.ni-ico{font-size:21px;transition:transform var(--spring)}
+.ni-lbl{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.3px;transition:color var(--ease);text-transform:uppercase}
+.ni.on .ni-lbl{color:var(--acc)}
+.ni.on .ni-ico{transform:scale(1.12)}
+.ni-pip{position:absolute;top:7px;right:calc(50% - 14px);width:6px;height:6px;border-radius:50%;background:var(--rose);border:2px solid var(--bg);display:none}
+.ni-pip.vis{display:block}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:16px;position:relative;overflow:hidden}
+.stat-lbl{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:.2px}
+.stat-v{font-family:var(--mono);font-size:26px;font-weight:500;line-height:1.1;margin-bottom:4px}
+.stat-ico{font-size:18px;position:absolute;top:14px;right:14px;opacity:.45}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.bd-pend{background:var(--amber2);color:var(--amber)}
+.bd-ok{background:var(--green2);color:var(--green)}
+.bd-rej{background:var(--rose2);color:var(--rose)}
+.bd-blk{background:rgba(100,100,120,.2);color:var(--text3)}
+.salon-row{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px 16px;margin-bottom:8px;display:flex;gap:12px;align-items:center;cursor:pointer;transition:all var(--ease);animation:fadeUp .3s ease both}
+.salon-row:active{background:var(--bg4)}
+.client-row{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px 16px;margin-bottom:8px;display:flex;gap:12px;align-items:center;cursor:pointer;transition:all var(--ease)}
+.client-row:active{background:var(--bg4)}
+.search-wrap{position:relative;margin-bottom:12px}
+.search-ico{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3)}
+.search-inp{width:100%;padding:12px 14px 12px 40px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--bg3);color:var(--text);font-family:'Manrope',sans-serif;font-size:14px;outline:none;transition:border-color var(--ease)}
+.search-inp:focus{border-color:var(--acc)}
+.search-inp::placeholder{color:var(--text3)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:20px;border:1.5px solid var(--border);background:var(--card);cursor:pointer;font-size:12px;font-weight:600;transition:all var(--ease);white-space:nowrap;color:var(--text2)}
+.chip.on{border-color:var(--acc);background:var(--acc3);color:var(--acc)}
+.chip:active{transform:scale(.96)}
+.cat-item{background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);padding:14px 16px;margin-bottom:8px;display:flex;gap:12px;align-items:center}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;z-index:200;opacity:0;pointer-events:none;transition:opacity var(--ease);backdrop-filter:blur(6px)}
+.modal.open{opacity:1;pointer-events:all}
+.modal-sheet{width:100%;background:var(--bg2);border-radius:24px 24px 0 0;border-top:1px solid var(--border);padding:0 20px 40px;transform:translateY(100%);transition:transform .38s cubic-bezier(.4,0,.2,1);max-height:90vh;overflow-y:auto}
+.modal.open .modal-sheet{transform:none}
+.modal-pill{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:12px auto 18px}
+.modal-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:16px}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-110px);background:var(--bg3);border:1px solid var(--border);border-radius:var(--rsm);padding:11px 20px;font-size:14px;font-weight:600;z-index:300;transition:transform .35s cubic-bezier(.4,0,.2,1);white-space:nowrap;max-width:92vw;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.s{border-color:rgba(74,222,128,.4)}.toast.e{border-color:rgba(251,113,133,.4)}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:44px 20px;text-align:center;gap:10px}
+.empty-ico{font-size:44px;opacity:.25}
+.empty-txt{color:var(--text2);font-size:14px;line-height:1.6}
+.spin-center{display:flex;align-items:center;justify-content:center;padding:48px}
+.spinner{width:32px;height:32px;border:2.5px solid var(--border2);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
+.sec-lbl{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;margin-top:20px}
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;margin-top:4px}
+.sec-t{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px}
+</style>
+</head>
+<body>
+
+<div class="screen active" id="s-splash">
+  <div style="display:flex;flex-direction:column;align-items:center">
+    <div class="splash-logo">⭐</div>
+    <div class="splash-name">Zap is...</div>
+    <div class="splash-tag">Superadmin Panel</div>
+    <div class="splash-bar"><div class="splash-prog"></div></div>
+  </div>
+</div>
+
+<div class="screen" id="s-nouid">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:32px">
+    <div style="font-size:56px">🔗</div>
+    <div style="font-family:'Playfair Display',serif;font-size:24px;font-weight:600">Доступ запрещён</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6">Войдите через бота <b style="color:var(--acc)">@ZapSuperBot</b> с правами суперадмина</div>
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px;font-family:var(--mono);font-size:14px;color:var(--acc)">@ZapSuperBot</div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="screen" id="s-dash">
+  <div class="mhdr">
+    <div class="hdr-l">
+      <div class="hdr-g">Суперадмин</div>
+      <div class="hdr-n">Zap is...</div>
+    </div>
+    <div class="avatar">⭐</div>
+  </div>
+  <div class="scroll">
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-ico">🏠</div><div class="stat-lbl">Всего салонов</div><div class="stat-v" id="st-salons">—</div></div>
+      <div class="stat-card"><div class="stat-ico">⏳</div><div class="stat-lbl">На модерации</div><div class="stat-v" id="st-pend">—</div></div>
+      <div class="stat-card"><div class="stat-ico">👥</div><div class="stat-lbl">Пользователей</div><div class="stat-v" id="st-users">—</div></div>
+      <div class="stat-card"><div class="stat-ico">📅</div><div class="stat-lbl">Записей</div><div class="stat-v" id="st-bookings">—</div></div>
+    </div>
+    <div class="sec-hdr"><div class="sec-t">На модерации</div><div style="font-size:13px;font-weight:600;color:var(--acc);cursor:pointer" onclick="showTab('salons')">Все →</div></div>
+    <div id="dash-pending"></div>
+    <div class="sec-lbl">Быстрые действия</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-acc" onclick="showTab('salons')">🏠 Управление салонами</button>
+      <button class="btn btn-out" onclick="showTab('users')">👥 Пользователи</button>
+      <button class="btn btn-out" onclick="showTab('cats')">🏷 Категории</button>
+    </div>
+  </div>
+  <div class="bnav">
+    <button class="ni on" onclick="showTab('dash')"><div class="ni-bar"></div><span class="ni-ico">📊</span><span class="ni-lbl">Главная</span></button>
+    <button class="ni" onclick="showTab('salons')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Салоны</span><div class="ni-pip" id="sa-pip"></div></button>
+    <button class="ni" onclick="showTab('users')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Юзеры</span></button>
+    <button class="ni" onclick="showTab('cats')"><div class="ni-bar"></div><span class="ni-ico">🏷</span><span class="ni-lbl">Категории</span></button>
+  </div>
+</div>
+
+<!-- SALONS -->
+<div class="screen" id="s-salons">
+  <div class="mhdr">
+    <div class="hdr-n">Салоны</div>
+    <div style="display:flex;gap:6px">
+      <div class="chip on" id="sf-all" onclick="salonFilter('all')">Все</div>
+      <div class="chip" id="sf-pend" onclick="salonFilter('pending')">⏳</div>
+      <div class="chip" id="sf-ok" onclick="salonFilter('approved')">✓</div>
+    </div>
+  </div>
+  <div class="scroll"><div id="salon-list"></div></div>
+  <div class="bnav">
+    <button class="ni" onclick="showTab('dash')"><div class="ni-bar"></div><span class="ni-ico">📊</span><span class="ni-lbl">Главная</span></button>
+    <button class="ni on" onclick="showTab('salons')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Салоны</span></button>
+    <button class="ni" onclick="showTab('users')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Юзеры</span></button>
+    <button class="ni" onclick="showTab('cats')"><div class="ni-bar"></div><span class="ni-ico">🏷</span><span class="ni-lbl">Категории</span></button>
+  </div>
+</div>
+
+<!-- USERS -->
+<div class="screen" id="s-users">
+  <div class="mhdr"><div class="hdr-n">Пользователи</div></div>
+  <div class="scroll">
+    <div class="search-wrap"><span class="search-ico">🔍</span><input class="search-inp" type="text" placeholder="Поиск..." oninput="filterUsers(this.value)" id="user-search"></div>
+    <div id="user-list"></div>
+  </div>
+  <div class="bnav">
+    <button class="ni" onclick="showTab('dash')"><div class="ni-bar"></div><span class="ni-ico">📊</span><span class="ni-lbl">Главная</span></button>
+    <button class="ni" onclick="showTab('salons')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Салоны</span></button>
+    <button class="ni on" onclick="showTab('users')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Юзеры</span></button>
+    <button class="ni" onclick="showTab('cats')"><div class="ni-bar"></div><span class="ni-ico">🏷</span><span class="ni-lbl">Категории</span></button>
+  </div>
+</div>
+
+<!-- CATEGORIES -->
+<div class="screen" id="s-cats">
+  <div class="mhdr">
+    <div class="hdr-n">Категории</div>
+    <button class="btn btn-sm btn-acc" style="width:auto" onclick="openAddCat()">+ Добавить</button>
+  </div>
+  <div class="scroll"><div id="cat-list"></div></div>
+  <div class="bnav">
+    <button class="ni" onclick="showTab('dash')"><div class="ni-bar"></div><span class="ni-ico">📊</span><span class="ni-lbl">Главная</span></button>
+    <button class="ni" onclick="showTab('salons')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Салоны</span></button>
+    <button class="ni" onclick="showTab('users')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Юзеры</span></button>
+    <button class="ni on" onclick="showTab('cats')"><div class="ni-bar"></div><span class="ni-ico">🏷</span><span class="ni-lbl">Категории</span></button>
+  </div>
+</div>
+
+<!-- SALON DETAIL MODAL -->
+<div class="modal" id="m-salon">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title" id="ms-title">Салон</div>
+    <div id="ms-body"></div>
+  </div>
+</div>
+
+<!-- USER DETAIL MODAL -->
+<div class="modal" id="m-user">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title" id="mu-title">Пользователь</div>
+    <div id="mu-body"></div>
+  </div>
+</div>
+
+<!-- ADD CATEGORY -->
+<div class="modal" id="m-addcat">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title" id="ac-title">Новая категория</div>
+    <div class="fg" style="margin-bottom:16px">
+      <div class="fr">
+        <div class="fld"><label>Иконка (эмодзи)</label><input type="text" id="ac-icon" placeholder="💅" maxlength="4"></div>
+        <div class="fld" style="flex:3"><label>Название</label><input type="text" id="ac-name" placeholder="Нейл-студия"></div>
+      </div>
+      <div class="fld"><label>Описание</label><input type="text" id="ac-desc" placeholder="Маникюр, педикюр..."></div>
+    </div>
+    <button class="btn btn-acc" id="ac-btn" onclick="saveCategory()">Добавить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-addcat')">Отмена</button>
+  </div>
+</div>
+
+<!-- REJECT REASON -->
+<div class="modal" id="m-reject">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title">Причина отклонения</div>
+    <div class="fld" style="margin-bottom:16px">
+      <label>Укажите причину для администратора</label>
+      <input type="text" id="reject-reason" placeholder="Недостаточно информации, некорректные данные...">
+    </div>
+    <button class="btn btn-rose" onclick="confirmReject()">Отклонить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-reject')">Отмена</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ls={get:k=>{try{return JSON.parse(localStorage.getItem('zapsa_'+k))}catch{return null}},set:(k,v)=>{try{localStorage.setItem('zapsa_'+k,JSON.stringify(v))}catch{}},del:k=>localStorage.removeItem('zapsa_'+k)};
+
+let FB=null;
+window.addEventListener('fbReady',async()=>{if(window._fbReady&&window._FB){FB=window._FB;try{await FB.signInAnonymously(FB.auth);}catch{}}},{once:true});
+
+async function fbGet(col,id){if(!FB)return null;try{const d=await FB.getDoc(FB.doc(FB.db,col,id));return d.exists()?{id:d.id,...d.data()}:null;}catch{return null;}}
+async function fbSet(col,id,data){if(!FB)return;try{await FB.setDoc(FB.doc(FB.db,col,id),data,{merge:true});}catch(e){console.warn(e);}}
+async function fbQuery(col,...conds){if(!FB)return[];try{let q=FB.collection(FB.db,col);if(conds.length)q=FB.query(q,...conds.map(([f,op,v])=>FB.where(f,op,v)));else q=FB.query(q);const snap=await FB.getDocs(q);return snap.docs.map(d=>({id:d.id,...d.data()}));}catch(e){console.warn(e);return[];}}
+async function fbDelete(col,id){if(!FB)return;try{await FB.deleteDoc(FB.doc(FB.db,col,id));}catch{}}
+
+const tg=window.Telegram?.WebApp||{ready:()=>{},expand:()=>{},initDataUnsafe:{user:{id:1,first_name:'SA'}},HapticFeedback:{impactOccurred:()=>{}},showConfirm:(t,cb)=>cb(confirm(t))};
+tg.ready();tg.expand();
+
+let UID=null,USER=null,LINK=null;
+let ALL_SALONS=[],ALL_USERS=[],ALL_CATS=[];
+let salonFilterVal='all',userSearchQ='';
+let editCatId=null,rejectSalonId=null;
+const ROLE_L={client:'Клиент',owner:'Администратор',master:'Мастер',superadmin:'Суперадмин'};
+const AV_COLS=['#60a5fa','#c084fc','#fb7185','#fbbf24','#4ade80','#2dd4bf'];
+
+const g=id=>document.getElementById(id);
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function avLetter(n){return(n||'?')[0].toUpperCase();}
+function fm(n){return Number(n||0).toLocaleString('ru-RU');}
+function fmDate(s){if(!s)return'';const d=new Date(s);return d.toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric'});}
+
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));g(id)?.classList.add('active');}
+function openModal(id){g(id)?.classList.add('open');}
+function closeModal(id){g(id)?.classList.remove('open');}
+document.addEventListener('click',e=>{if(e.target.classList.contains('modal'))closeModal(e.target.id);});
+let toastTimer;
+function showToast(msg,type=''){const el=g('toast');el.textContent=msg;el.className=`toast show${type?' '+type:''}`;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2800);}
+
+window.addEventListener('DOMContentLoaded',async()=>{
+  await new Promise(r=>{if(window._fbReady!==undefined)return r();window.addEventListener('fbReady',r,{once:true});});
+  const sp=new URLSearchParams(location.search);
+  const urlUid=sp.get('uid');
+  if(urlUid&&urlUid.length===64){UID=urlUid;ls.set('uid',urlUid);history.replaceState(null,'',location.pathname);}
+  else UID=ls.get('uid');
+  setTimeout(boot,2200);
+});
+
+async function boot(){
+  if(!UID){showScreen('s-nouid');return;}
+  LINK=await fbGet('user_links',UID);
+  USER=await fbGet('users',UID);
+  if(!USER||USER.role!=='superadmin'){showScreen('s-nouid');return;}
+  await loadAll();
+  renderDash();
+  showScreen('s-dash');
+  startHeartbeat();
+}
+
+function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
+
+async function loadAll(){
+  [ALL_SALONS,ALL_USERS,ALL_CATS]=await Promise.all([
+    fbQuery('salons'),
+    fbQuery('users'),
+    fbQuery('categories')
+  ]);
+}
+
+// ── TABS ──
+const TABS={dash:'s-dash',salons:'s-salons',users:'s-users',cats:'s-cats'};
+function showTab(tab){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  g(TABS[tab])?.classList.add('active');
+  document.querySelectorAll('.ni').forEach(ni=>ni.classList.remove('on'));
+  if(tab==='dash')renderDash();
+  else if(tab==='salons')renderSalons();
+  else if(tab==='users')renderUsers();
+  else if(tab==='cats')renderCats();
+  tg.HapticFeedback.impactOccurred('light');
+}
+
+// ── DASHBOARD ──
+function renderDash(){
+  const pending=ALL_SALONS.filter(s=>s.status==='pending');
+  g('st-salons').textContent=ALL_SALONS.length;
+  g('st-pend').textContent=pending.length;
+  g('st-users').textContent=ALL_USERS.length;
+  g('sa-pip')?.classList.toggle('vis',pending.length>0);
+  const el=g('dash-pending');
+  el.innerHTML=pending.slice(0,3).map(s=>salonRow(s,true)).join('')||`<div style="font-size:13px;color:var(--text3);padding:8px 0">Нет заявок на модерацию</div>`;
+  // Async: load bookings count
+  fbQuery('bookings').then(bks=>{ if(g('st-bookings'))g('st-bookings').textContent=bks.length; });
+}
+
+function salonRow(s,compact=false){
+  const statusBadge={pending:'<span class="badge bd-pend">⏳ Модерация</span>',approved:'<span class="badge bd-ok">✓ Одобрен</span>',rejected:'<span class="badge bd-rej">✕ Отклонён</span>',blocked:'<span class="badge bd-blk">🚫 Заблокирован</span>'}[s.status]||'';
+  return `<div class="salon-row" onclick="openSalonDetail('${s.id}')">
+    <div style="width:44px;height:44px;border-radius:var(--rsm);background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${s.icon||'🏠'}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;font-weight:700;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.name)}</div>
+      ${!compact?`<div style="font-size:12px;color:var(--text2);margin-bottom:4px">${esc(s.addr||'')} ${s.city?'· '+esc(s.city):''}</div>`:''}
+      ${statusBadge}
+    </div>
+    <div style="font-size:11px;color:var(--text3);flex-shrink:0">${fmDate(s.createdAt)}</div>
+  </div>`;
+}
+
+// ── SALONS ──
+function salonFilter(f){
+  salonFilterVal=f;
+  ['all','pend','ok'].forEach(k=>g('sf-'+k)?.classList.remove('on'));
+  const map={all:'sf-all',pending:'sf-pend',approved:'sf-ok'};
+  g(map[f]||'sf-all')?.classList.add('on');
+  renderSalons();
+}
+function renderSalons(){
+  let list=ALL_SALONS;
+  if(salonFilterVal!=='all')list=list.filter(s=>s.status===salonFilterVal);
+  list.sort((a,b)=>{const order={pending:0,approved:1,rejected:2,blocked:3};return(order[a.status]||9)-(order[b.status]||9);});
+  const el=g('salon-list');
+  el.innerHTML=list.length?list.map(s=>salonRow(s)).join(''):`<div class="empty"><div class="empty-ico">🏠</div><div class="empty-txt">Нет салонов</div></div>`;
+}
+
+async function openSalonDetail(id){
+  const s=ALL_SALONS.find(x=>x.id===id)||await fbGet('salons',id);if(!s)return;
+  const owner=ALL_USERS.find(u=>u.uid===s.ownerId);
+  const bookings=await fbQuery('bookings',['bizId','==',id]);
+  const revenue=bookings.filter(b=>b.status==='done').reduce((sum,b)=>sum+Number(b.price),0);
+  g('ms-title').textContent=s.name;
+  g('ms-body').innerHTML=`
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:16px">
+      <div style="width:56px;height:56px;border-radius:var(--rsm);background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:28px">${s.icon||'🏠'}</div>
+      <div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px">${esc(s.name)}</div>
+        <div style="font-size:12px;color:var(--text2)">${esc(s.typeName||s.bizType||'')} · ${esc(s.city||'')}</div>
+        <div style="margin-top:6px">${{pending:'<span class="badge bd-pend">⏳ На модерации</span>',approved:'<span class="badge bd-ok">✓ Одобрен</span>',rejected:'<span class="badge bd-rej">✕ Отклонён</span>',blocked:'<span class="badge bd-blk">🚫 Заблокирован</span>'}[s.status]||''}</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text2);margin-bottom:16px">
+      ${s.addr?`<div>📍 ${esc(s.addr)}</div>`:''}
+      ${s.phone?`<div>📞 ${esc(s.phone)}</div>`:''}
+      ${s.instagram?`<div>📸 ${esc(s.instagram)}</div>`:''}
+      ${s.open?`<div>🕐 ${s.open} – ${s.close}</div>`:''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      <div style="background:var(--bg3);border-radius:var(--rsm);padding:12px;text-align:center"><div style="font-size:11px;color:var(--text2)">Записей</div><div style="font-family:var(--mono);font-size:20px;font-weight:500">${bookings.length}</div></div>
+      <div style="background:var(--bg3);border-radius:var(--rsm);padding:12px;text-align:center"><div style="font-size:11px;color:var(--text2)">Выручка</div><div style="font-family:var(--mono);font-size:16px;font-weight:500;color:var(--acc)">${fm(revenue)}₸</div></div>
+      <div style="background:var(--bg3);border-radius:var(--rsm);padding:12px;text-align:center"><div style="font-size:11px;color:var(--text2)">Владелец</div><div style="font-size:12px;font-weight:600;margin-top:2px">${esc(owner?.firstName||'—')}</div></div>
+    </div>
+    ${s.status==='pending'?`<div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn btn-green" onclick="approveSalon('${s.id}')">✓ Одобрить</button>
+      <button class="btn btn-rose" onclick="openReject('${s.id}')">✕ Отклонить</button>
+    </div>`:''}
+    ${s.status==='approved'?`<button class="btn btn-amber" style="margin-bottom:8px" onclick="blockSalon('${s.id}')">🚫 Заблокировать</button>`:''}
+    ${s.status==='blocked'?`<button class="btn btn-green" style="margin-bottom:8px" onclick="unblockSalon('${s.id}')">🔓 Разблокировать</button>`:''}
+    <button class="btn btn-out" onclick="closeModal('m-salon')">Закрыть</button>`;
+  openModal('m-salon');
+}
+
+async function approveSalon(id){
+  await fbSet('salons',id,{status:'approved',approvedAt:new Date().toISOString()});
+  updateSalon(id,{status:'approved'});closeModal('m-salon');
+  showToast('Салон одобрен ✓','s');renderSalons();renderDash();
+}
+function openReject(id){rejectSalonId=id;g('reject-reason').value='';openModal('m-reject');}
+async function confirmReject(){
+  const reason=g('reject-reason').value.trim()||'Заявка отклонена.';
+  await fbSet('salons',rejectSalonId,{status:'rejected',rejectedReason:reason,rejectedAt:new Date().toISOString()});
+  updateSalon(rejectSalonId,{status:'rejected',rejectedReason:reason});
+  closeModal('m-reject');closeModal('m-salon');
+  showToast('Заявка отклонена');renderSalons();renderDash();
+}
+async function blockSalon(id){
+  await fbSet('salons',id,{status:'blocked'});
+  updateSalon(id,{status:'blocked'});closeModal('m-salon');
+  showToast('Салон заблокирован');renderSalons();
+}
+async function unblockSalon(id){
+  await fbSet('salons',id,{status:'approved'});
+  updateSalon(id,{status:'approved'});closeModal('m-salon');
+  showToast('Салон разблокирован','s');renderSalons();
+}
+function updateSalon(id,upd){const idx=ALL_SALONS.findIndex(s=>s.id===id);if(idx>=0)Object.assign(ALL_SALONS[idx],upd);}
+
+// ── USERS ──
+function renderUsers(){
+  let list=ALL_USERS;
+  if(userSearchQ){const q=userSearchQ.toLowerCase();list=list.filter(u=>(u.name||'').toLowerCase().includes(q)||(u.phone||'').includes(q)||(u.firstName||'').toLowerCase().includes(q));}
+  const el=g('user-list');
+  el.innerHTML=list.length?list.map((u,i)=>`<div class="client-row" onclick="openUserDetail('${u.uid||u.id}')">
+    <div style="width:44px;height:44px;border-radius:50%;background:${AV_COLS[i%AV_COLS.length]};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0">${avLetter(u.firstName||u.name)}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;font-weight:700;margin-bottom:2px">${esc(u.name||u.firstName||'—')}</div>
+      <div style="font-size:12px;color:var(--text2)">${esc(u.phone||'')} · ${ROLE_L[u.role]||u.role||'—'}</div>
+    </div>
+    ${u.blocked?'<span class="badge bd-rej">🚫</span>':''}
+  </div>`).join(''):`<div class="empty"><div class="empty-ico">👥</div><div class="empty-txt">Нет пользователей</div></div>`;
+}
+function filterUsers(q){userSearchQ=q;renderUsers();}
+
+async function openUserDetail(uid){
+  const u=ALL_USERS.find(x=>x.uid===uid||x.id===uid)||await fbGet('users',uid);if(!u)return;
+  const salon=u.salonId?ALL_SALONS.find(s=>s.id===u.salonId):null;
+  const blocked=u.blocked;
+  g('mu-title').textContent=u.name||u.firstName||'Пользователь';
+  g('mu-body').innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text2);margin-bottom:16px">
+      <div>Роль: <b style="color:var(--text)">${ROLE_L[u.role]||u.role||'—'}</b></div>
+      ${u.phone?`<div>📞 ${esc(u.phone)}</div>`:''}
+      ${u.city?`<div>🏙 ${esc(u.city)}</div>`:''}
+      ${salon?`<div>🏠 Салон: <b style="color:var(--text)">${esc(salon.name)}</b></div>`:''}
+      <div style="font-size:11px;color:var(--text3)">uid: ${esc(uid||'').slice(0,16)}...</div>
+    </div>
+    <button class="btn ${blocked?'btn-green':'btn-rose'}" onclick="toggleBlockUser('${uid}')">${blocked?'🔓 Разблокировать':'🚫 Заблокировать'}</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-user')">Закрыть</button>`;
+  openModal('m-user');
+}
+async function toggleBlockUser(uid){
+  const idx=ALL_USERS.findIndex(u=>u.uid===uid||u.id===uid);if(idx<0)return;
+  const blocked=!ALL_USERS[idx].blocked;
+  ALL_USERS[idx].blocked=blocked;
+  await fbSet('users',uid,{blocked});
+  await fbSet('blocks',uid,{blocked,by:UID,at:new Date().toISOString()});
+  closeModal('m-user');showToast(blocked?'Пользователь заблокирован':'Пользователь разблокирован');
+  renderUsers();
+}
+
+// ── CATEGORIES ──
+function renderCats(){
+  const el=g('cat-list');if(!el)return;
+  el.innerHTML=ALL_CATS.length?ALL_CATS.map(c=>`<div class="cat-item">
+    <div style="width:44px;height:44px;border-radius:var(--rsm);background:var(--acc3);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${c.icon||'⭐'}</div>
+    <div style="flex:1">
+      <div style="font-size:14px;font-weight:700;margin-bottom:2px">${esc(c.name)}</div>
+      <div style="font-size:12px;color:var(--text2)">${esc(c.desc||'')}</div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-sm btn-ghost" style="width:auto" onclick="editCat('${c.id}')">✎</button>
+      <button class="btn btn-sm btn-rose" style="width:auto" onclick="deleteCat('${c.id}')">✕</button>
+    </div>
+  </div>`).join(''):`<div class="empty"><div class="empty-ico">🏷</div><div class="empty-txt">Категорий пока нет.<br>Создайте первую!</div></div>`;
+}
+
+function openAddCat(){
+  editCatId=null;g('ac-title').textContent='Новая категория';g('ac-btn').textContent='Добавить';
+  g('ac-icon').value='';g('ac-name').value='';g('ac-desc').value='';
+  openModal('m-addcat');
+}
+function editCat(id){
+  editCatId=id;const c=ALL_CATS.find(x=>x.id===id);if(!c)return;
+  g('ac-title').textContent='Редактировать категорию';g('ac-btn').textContent='Сохранить';
+  g('ac-icon').value=c.icon||'';g('ac-name').value=c.name||'';g('ac-desc').value=c.desc||'';
+  openModal('m-addcat');
+}
+async function saveCategory(){
+  const icon=g('ac-icon').value.trim()||'⭐';
+  const name=g('ac-name').value.trim();
+  const desc=g('ac-desc').value.trim();
+  if(!name){showToast('Введите название','e');return;}
+  if(editCatId){
+    const idx=ALL_CATS.findIndex(c=>c.id===editCatId);
+    if(idx>=0)Object.assign(ALL_CATS[idx],{icon,name,desc});
+    await fbSet('categories',editCatId,{icon,name,desc});
+  } else {
+    const id='cat_'+Date.now();
+    const cat={id,icon,name,desc,active:true,createdAt:new Date().toISOString()};
+    ALL_CATS.push(cat);
+    await fbSet('categories',id,cat);
+  }
+  closeModal('m-addcat');showToast('Сохранено','s');renderCats();
+}
+async function deleteCat(id){
+  tg.showConfirm('Удалить категорию? Салоны с этой категорией перейдут в "Другое".',async yes=>{
+    if(!yes)return;
+    await fbDelete('categories',id);
+    ALL_CATS=ALL_CATS.filter(c=>c.id!==id);
+    showToast('Категория удалена');renderCats();
+  });
+}
+</script>
+</body>
+</html>
