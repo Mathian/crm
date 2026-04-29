@@ -677,49 +677,56 @@ window.addEventListener('DOMContentLoaded',async()=>{
 });
 
 async function boot(){
-  if(!UID){showScreen('s-nouid');return;}
-  LINK=await fbGet('user_links',UID);
-  USER=await fbGet('users',UID);
-  if(!USER){
-    const tgU=tg.initDataUnsafe?.user;
-    USER={uid:UID,tgId:String(tgU?.id||''),firstName:tgU?.first_name||'Пользователь',lastName:tgU?.last_name||'',name:tgU?.first_name||'Пользователь',phone:LINK?.phone||'',role:'owner',createdAt:new Date().toISOString()};
-    await fbSet('users',UID,USER);
-  }
-  // Find salon by ownerId
-  const salons=await fbQuery('salons',['ownerId','==',UID]);
-  if(salons.length>0){
-    BIZ=salons[0];
-    if(BIZ.status==='rejected'){g('rejected-reason').textContent=BIZ.rejectedReason||'Заявка отклонена.';showScreen('s-rejected');return;}
-    if(BIZ.status==='pending'){g('pending-salon-name').textContent=BIZ.name;showScreen('s-pending');return;}
-    await loadData();
-    initDash();
-  } else {
-    renderBtypeGrid();
+  try{
+    if(!UID){showScreen('s-nouid');return;}
+    LINK=await fbGet('user_links',UID);
+    USER=await fbGet('users',UID);
+    if(!USER){
+      const tgU=tg.initDataUnsafe?.user;
+      USER={uid:UID,tgId:String(tgU?.id||''),firstName:tgU?.first_name||'Пользователь',lastName:tgU?.last_name||'',name:tgU?.first_name||'Пользователь',phone:LINK?.phone||'',role:'owner',createdAt:new Date().toISOString()};
+      await fbSet('users',UID,USER);
+    }
+    // Find salon by ownerId
+    const salons=await fbQuery('salons',['ownerId','==',UID]);
+    if(salons.length>0){
+      BIZ=salons[0];
+      if(BIZ.status==='rejected'){g('rejected-reason').textContent=BIZ.rejectedReason||'Заявка отклонена.';showScreen('s-rejected');return;}
+      if(BIZ.status==='pending'){g('pending-salon-name').textContent=BIZ.name;showScreen('s-pending');return;}
+      await loadData();
+      initDash();
+    } else {
+      renderBtypeGrid();
+      showScreen('s-create-salon');
+    }
+    startHeartbeat();
+  }catch(e){
+    console.error('boot error:',e);
+    // Показываем экран создания салона как fallback вместо вечного сплеша
+    try{renderBtypeGrid();}catch{}
     showScreen('s-create-salon');
   }
-  startHeartbeat();
 }
 
 function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
 
 // ── BTYPE GRID ──
-let selBtype='';
+let curBtype='';
 function renderBtypeGrid(){
-  g('btype-grid').innerHTML=BTYPES.map(b=>`<div style="padding:14px 10px;border-radius:var(--r);border:1.5px solid ${selBtype===b.id?'var(--acc)':'var(--border)'};background:${selBtype===b.id?'var(--acc3)':'var(--card)'};cursor:pointer;text-align:center;transition:all var(--ease)" onclick="selBtype('${b.id}')">
+  g('btype-grid').innerHTML=BTYPES.map(b=>`<div style="padding:14px 10px;border-radius:var(--r);border:1.5px solid ${curBtype===b.id?'var(--acc)':'var(--border)'};background:${curBtype===b.id?'var(--acc3)':'var(--card)'};cursor:pointer;text-align:center;transition:all var(--ease)" onclick="selBtype('${b.id}')">
     <div style="font-size:26px;margin-bottom:7px">${b.icon}</div>
     <div style="font-size:12px;font-weight:700">${b.name}</div>
   </div>`).join('');
 }
-function selBtype(id){selBtype=id;renderBtypeGrid();}
+function selBtype(id){curBtype=id;renderBtypeGrid();}
 
 // ── CREATE SALON ──
 async function createSalon(){
-  if(!selBtype){showToast('Выберите тип бизнеса','e');return;}
+  if(!curBtype){showToast('Выберите тип бизнеса','e');return;}
   const name=g('cs-name').value.trim();
   if(!name){showToast('Введите название студии','e');return;}
-  const bt=BTYPES.find(b=>b.id===selBtype);
+  const bt=BTYPES.find(b=>b.id===curBtype);
   const salonId=UID+'_salon_'+Date.now();
-  BIZ={id:salonId,ownerId:UID,bizType:selBtype,name,icon:bt.icon,typeName:bt.typeName,
+  BIZ={id:salonId,ownerId:UID,bizType:curBtype,name,icon:bt.icon,typeName:bt.typeName,
     cover:bt.cover,addr:g('cs-addr').value.trim(),phone:g('cs-phone').value.trim()||USER.phone,
     instagram:g('cs-ig').value.trim(),open:g('cs-open').value||'09:00',close:g('cs-close').value||'21:00',
     city:g('cs-city').value.trim(),img:null,status:'pending',onlineBooking:true,createdAt:new Date().toISOString()};
