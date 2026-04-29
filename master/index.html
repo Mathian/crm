@@ -325,7 +325,8 @@ async function findMySalon(phone){
   }
   const svcDoc=await fbGet('salon_services',BIZ.id);
   SERVICES=svcDoc?.services||[];
-  BOOKINGS=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id],['status','!=','cancelled']);
+  const _bkRaw=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id]);
+  BOOKINGS=_bkRaw.filter(b=>b.status!=='cancelled');
   g('mst-name').textContent=MY_MASTER.name||USER.firstName;
   g('mst-av').textContent=avLetter(MY_MASTER.name||USER.firstName);
   renderSched();
@@ -454,7 +455,7 @@ async function renderNbTime(){
   g('nb-body').innerHTML=`<div class="spin-center"><div class="spinner"></div></div>`;
   const dur=nbData.service?.dur||60;
   let existing=[];
-  try{existing=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id],['date','==',nbData.date],['status','!=','cancelled']);}catch{}
+  try{const _ex=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id],['date','==',nbData.date]);existing=_ex.filter(b=>b.status!=='cancelled');}catch{}
   const open=MY_MASTER.open||'09:00',close=MY_MASTER.close||'19:00';
   const slots=calcSlots(open,close,dur,existing);
   g('nb-body').innerHTML=`<div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(nbData.date)}</div>

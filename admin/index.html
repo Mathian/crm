@@ -973,7 +973,7 @@ async function renderNbTime(){
   g('nb-body').innerHTML=`<div class="spin-center"><div class="spinner"></div></div>`;
   const master=nbData.master;const dur=nbData.service?.dur||60;
   let existing=[];
-  try{existing=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',master?.id||''],['date','==',nbData.date],['status','!=','cancelled']);}catch{}
+  try{const _ex=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',master?.id||''],['date','==',nbData.date]);existing=_ex.filter(b=>b.status!=='cancelled');}catch{}
   const open=master?.open||BIZ.open||'09:00',close=master?.close||BIZ.close||'21:00';
   const slots=calcSlots(open,close,dur,existing);
   g('nb-body').innerHTML=`

@@ -517,6 +517,7 @@ tg.ready(); tg.expand();
 // ── STATE ──
 let UID = null, USER = null, LINK = null;
 let ALL_SALONS = [], ALL_CATS = [];
+let FAVS = []; // array of salonId strings
 let curSalonId = null, curSalon = null, curServices = [], curMasters = [];
 let wizStep = 0;
 let wiz = { service: null, master: null, date: null, time: null };
@@ -604,6 +605,7 @@ async function boot() {
   if (!USER) { showOnboard(); return; }
 
   g('cli-av').textContent = avLetter(USER.firstName || USER.name);
+  await loadFavs();
   await loadCatalog();
   renderCatalog();
   showScreen('s-catalog');
@@ -614,6 +616,25 @@ async function boot() {
 function startHeartbeat() {
   const send = () => { if (UID) fbSet('users', UID, { webAppLastSeen: new Date().toISOString() }); };
   send(); setInterval(send, 5000);
+}
+
+// ── FAVOURITES ──
+async function loadFavs() {
+  const doc = await fbGet('favorites', UID);
+  FAVS = doc?.salonIds || [];
+}
+function isFav(salonId) { return FAVS.includes(salonId); }
+async function toggleFav(salonId, ev) {
+  if (ev) ev.stopPropagation();
+  const wasFav = isFav(salonId);
+  if (wasFav) FAVS = FAVS.filter(id => id !== salonId);
+  else FAVS = [...FAVS, salonId];
+  await fbSet('favorites', UID, { salonIds: FAVS, uid: UID });
+  tg.HapticFeedback.impactOccurred('light');
+  renderCatalog();
+  // update heart in salon detail if it's open
+  const btn = g('fav-btn');
+  if (btn) { btn.textContent = isFav(salonId) ? '❤️' : '🤍'; btn.title = isFav(salonId)?'Убрать из избранного':'Добавить в избранное'; }
 }
 
 // ── ONBOARD ──
@@ -675,12 +696,24 @@ function renderCatalog() {
     salons = salons.filter(s => (s.name||'').toLowerCase().includes(q) || (s.addr||'').toLowerCase().includes(q));
   }
 
+  // Favourites first
+  const favSalons = salons.filter(s => isFav(s.id));
+  const restSalons = salons.filter(s => !isFav(s.id));
+  salons = [...favSalons, ...restSalons];
+
   const el = g('salon-list');
   if (!salons.length) {
     el.innerHTML = `<div class="empty"><div class="empty-ico">🔍</div><div class="empty-txt">Ничего не найдено</div></div>`;
     return;
   }
-  el.innerHTML = salons.map(s => salonCard(s)).join('');
+  let html = '';
+  if (favSalons.length && !searchQ && activeCat === 'all') {
+    html += `<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;padding:4px 0 8px;text-transform:uppercase">❤️ Избранное</div>`;
+    html += favSalons.map(s => salonCard(s)).join('');
+    if (restSalons.length) html += `<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;padding:12px 0 8px;text-transform:uppercase">Все салоны</div>`;
+  }
+  html += restSalons.map(s => salonCard(s)).join('');
+  el.innerHTML = html;
 }
 
 function setCat(id) { activeCat = id; renderCatalog(); }
@@ -688,10 +721,12 @@ function filterSalons(q) { searchQ = q; renderCatalog(); }
 
 function salonCard(s) {
   const open = isOpen(s.open||'00:00', s.close||'23:59');
+  const fav = isFav(s.id);
   return `<div class="salon-card" onclick="openSalon('${s.id}')">
     <div class="salon-cover" style="${s.cover||'background:var(--bg4)'}">
       ${s.img ? `<img src="${s.img}" alt="">` : `<div class="salon-cover-ico">${s.icon||'✦'}</div>`}
       <div class="salon-badge ${open?'sb-open':'sb-closed'}">${open?'Открыто':'Закрыто'}</div>
+      <button onclick="toggleFav('${s.id}',event)" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.45);border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2">${fav?'❤️':'🤍'}</button>
     </div>
     <div class="salon-body">
       <div class="salon-name">${esc(s.name)}</div>
@@ -732,7 +767,10 @@ async function openSalon(id) {
           <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600;margin-bottom:4px">${esc(curSalon.name)}</div>
           <div style="font-size:13px;color:var(--acc);font-weight:600">${esc(curSalon.typeName||'')}</div>
         </div>
-        <span class="badge ${open?'bd-done':'bd-canc'}">${open?'Открыто':'Закрыто'}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button id="fav-btn" onclick="toggleFav('${curSalon.id}',event)" style="background:var(--bg4);border:none;border-radius:50%;width:36px;height:36px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="${isFav(curSalon.id)?'Убрать из избранного':'Добавить в избранное'}">${isFav(curSalon.id)?'❤️':'🤍'}</button>
+          <span class="badge ${open?'bd-done':'bd-canc'}">${open?'Открыто':'Закрыто'}</span>
+        </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:13px;color:var(--text2)">
         ${curSalon.addr?`<div>📍 ${esc(curSalon.addr)}</div>`:''}
@@ -942,6 +980,26 @@ async function confirmBooking() {
   };
 
   await fbSet('bookings', id, booking);
+
+  // Auto-add client to salon's client base (deduplicated by bizId+uid)
+  const clientDocId = curSalonId + '_' + UID;
+  const existingClient = await fbGet('salon_clients', clientDocId);
+  const clientName = USER?.name || ((USER?.firstName||'') + ' ' + (USER?.lastName||'')).trim() || 'Клиент';
+  const clientPhone = USER?.phone || LINK?.phone || '';
+  if (!existingClient) {
+    await fbSet('salon_clients', clientDocId, {
+      id: clientDocId, bizId: curSalonId,
+      clientId: UID, name: clientName, phone: clientPhone,
+      visits: 1, totalSpent: wiz.service?.price || 0,
+      createdAt: new Date().toISOString(), createdBy: 'client'
+    });
+  } else {
+    await fbSet('salon_clients', clientDocId, {
+      visits: (existingClient.visits || 0) + 1,
+      totalSpent: (existingClient.totalSpent || 0) + (wiz.service?.price || 0)
+    });
+  }
+
   tg.HapticFeedback.impactOccurred('heavy');
   showToast('Запись создана! 🎉','s');
   renderMyBookings();
