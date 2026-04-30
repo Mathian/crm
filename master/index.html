@@ -153,6 +153,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .menu-arr{color:var(--text3)}
 .sec-t{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px}
 .invite-card{background:var(--bg3);border-radius:var(--r);border:1.5px solid rgba(251,191,36,.3);padding:16px;margin-bottom:12px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:20px;border:1.5px solid var(--border);background:var(--card);cursor:pointer;font-size:12px;font-weight:600;transition:all var(--ease);white-space:nowrap;color:var(--text2);flex-shrink:0}
+.chip.on{border-color:var(--acc);background:var(--acc3);color:var(--acc)}
+.chip:active{transform:scale(.96)}
 </style>
 </head>
 <body>
@@ -197,6 +200,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   </div>
   <div class="scroll">
     <div class="cal-strip" id="m-cal"></div>
+    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;scrollbar-width:none" id="m-filters"></div>
     <div id="m-sched-list"></div>
   </div>
   <div class="bnav">
@@ -262,6 +266,18 @@ async function fbGet(col,id){if(!FB)return null;try{const d=await FB.getDoc(FB.d
 async function fbSet(col,id,data){if(!FB)return;try{await FB.setDoc(FB.doc(FB.db,col,id),data,{merge:true});}catch(e){console.warn(e);}}
 async function fbQuery(col,...conds){if(!FB)return[];try{const q=FB.query(FB.collection(FB.db,col),...conds.map(([f,op,v])=>FB.where(f,op,v)));const snap=await FB.getDocs(q);return snap.docs.map(d=>({id:d.id,...d.data()}));}catch{return[];}}
 
+// ── NOTIFICATIONS ──
+async function writeNotif(recipientUid,recipientRole,text,type,bookingId=''){
+  if(!FB||!recipientUid)return;
+  try{
+    const id='n_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+    await FB.setDoc(FB.doc(FB.db,'notifications',id),{
+      recipientUid,recipientRole,text,type,bookingId,sent:false,
+      createdAt:new Date().toISOString()
+    });
+  }catch(e){console.warn('writeNotif',e);}
+}
+
 const tg=window.Telegram?.WebApp||{ready:()=>{},expand:()=>{},initDataUnsafe:{user:{id:1,first_name:'Тест'}},HapticFeedback:{impactOccurred:()=>{}},showConfirm:(t,cb)=>cb(confirm(t))};
 tg.ready();tg.expand();
 
@@ -269,6 +285,7 @@ let UID=null,USER=null,LINK=null,BIZ=null,MY_MASTER=null;
 let BOOKINGS=[],SERVICES=[];
 let selDate=todayStr();
 let nbStep=0,nbData={};
+let selStatusF='all'; // 'all' | 'pending'
 
 const g=id=>document.getElementById(id);
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -326,16 +343,33 @@ async function findMySalon(phone){
   const svcDoc=await fbGet('salon_services',BIZ.id);
   SERVICES=svcDoc?.services||[];
   const _bkRaw=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id]);
-  BOOKINGS=_bkRaw.filter(b=>b.status!=='cancelled');
+  BOOKINGS=_bkRaw; // keep all statuses
   g('mst-name').textContent=MY_MASTER.name||USER.firstName;
   g('mst-av').textContent=avLetter(MY_MASTER.name||USER.firstName);
   renderSched();
+  startSync();
   showScreen('s-sched');
 }
 
 function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
 
+// ── REAL-TIME SYNC ──
+let _syncInt=null;
+function startSync(){
+  if(_syncInt)clearInterval(_syncInt);
+  _syncInt=setInterval(async()=>{
+    if(!BIZ||!MY_MASTER)return;
+    try{
+      const fresh=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id]);
+      BOOKINGS=fresh;
+    }catch{}
+    if(curTab==='sched'){renderFilters();renderCalStrip();renderSchedList();};
+  },3000);
+}
+
+let curTab='sched';
 function showTab(tab){
+  curTab=tab;
   tg.HapticFeedback.impactOccurred('light');
   if(tab==='sched'){renderSched();showScreen('s-sched');}
   else if(tab==='prof'){renderProf();showScreen('s-prof');}
@@ -344,14 +378,23 @@ function showTab(tab){
 // ── SCHEDULE ──
 function renderSched(){
   renderCalStrip();
+  renderFilters();
   renderSchedList();
 }
+function renderFilters(){
+  const el=g('m-filters');if(!el)return;
+  const pCount=BOOKINGS.filter(b=>b.status==='pending').length;
+  el.innerHTML=
+    `<div class="chip${selStatusF==='pending'?' on':''}" style="${selStatusF==='pending'?'border-color:var(--acc);background:var(--acc3);color:var(--acc)':''}" onclick="selSF('pending')">⏳ Ожидают${pCount>0?' ('+pCount+')':''}</div>`+
+    `<div class="chip${selStatusF==='all'?' on':''}" onclick="selSF('all')">📆 Все даты</div>`;
+}
+function selSF(f){selStatusF=f;renderFilters();renderSchedList();tg.HapticFeedback.impactOccurred('light');}
 function renderCalStrip(){
   const el=g('m-cal');if(!el)return;
   const today=new Date();const days=[];
   for(let i=-1;i<=13;i++){const d=new Date(today);d.setDate(today.getDate()+i);days.push(d);}
   el.innerHTML=days.map(d=>{
-    const ds=dateStr(d);const hasA=BOOKINGS.some(b=>b.date===ds);
+    const ds=dateStr(d);const hasA=BOOKINGS.some(b=>b.date===ds&&b.status!=='cancelled');
     return `<div class="cal-day${ds===selDate?' on':''}${ds===todayStr()?' today':''}${hasA?' has-appt':''}" onclick="selDateFn('${ds}')">
       <div class="cal-wd">${WD[d.getDay()]}</div><div class="cal-d">${d.getDate()}</div><div class="cal-pip"></div>
     </div>`;
@@ -361,9 +404,20 @@ function renderCalStrip(){
 function selDateFn(ds){selDate=ds;renderCalStrip();renderSchedList();tg.HapticFeedback.impactOccurred('light');}
 function renderSchedList(){
   const el=g('m-sched-list');if(!el)return;
-  const bks=BOOKINGS.filter(b=>b.date===selDate).sort((a,b)=>a.time.localeCompare(b.time));
+  let bks;
+  if(selStatusF==='pending'){
+    bks=BOOKINGS.filter(b=>b.status==='pending').sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
+    if(!bks.length){el.innerHTML=`<div class="empty"><div class="empty-ico">⏳</div><div class="empty-txt">Нет записей, ожидающих подтверждения</div></div>`;return;}
+    el.innerHTML=bks.map(b=>apptCard(b)).join('');return;
+  }
+  bks=BOOKINGS.filter(b=>b.date===selDate).sort((a,b)=>a.time.localeCompare(b.time));
   if(!bks.length){el.innerHTML=`<div class="empty"><div class="empty-ico">📆</div><div class="empty-txt">На ${selDate===todayStr()?'сегодня':fmDate(selDate)} записей нет</div><button class="btn btn-sm btn-ghost" style="margin-top:12px" onclick="openNewBooking()">+ Добавить запись</button></div>`;return;}
-  el.innerHTML=bks.map(b=>apptCard(b)).join('')+`<button class="btn btn-out" style="margin-top:8px" onclick="openNewBooking()">+ Добавить запись</button>`;
+  // Show active first, then cancelled/done below divider
+  const active=bks.filter(b=>b.status!=='cancelled'&&b.status!=='done');
+  const past=bks.filter(b=>b.status==='cancelled'||b.status==='done');
+  el.innerHTML=active.map(b=>apptCard(b)).join('')+
+    `<button class="btn btn-out" style="margin-top:8px" onclick="openNewBooking()">+ Добавить запись</button>`+
+    (past.length?`<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px">История</div>`+past.map(b=>apptCard(b)).join(''):'');
 }
 
 function apptCard(b){
@@ -386,7 +440,6 @@ function apptCard(b){
 
 async function openBkDetail(id){
   const b=BOOKINGS.find(bk=>bk.id===id)||await fbGet('bookings',id);if(!b)return;
-  const canCancel=b.status==='pending'||b.status==='confirmed';
   g('bkdetail-body').innerHTML=`
     <div class="bconf">
       <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Клиент</div><div class="bc-val">${esc(b.clientName)}</div><div style="font-size:12px;color:var(--text2)">${esc(b.clientPhone||'')}</div></div></div>
@@ -395,17 +448,54 @@ async function openBkDetail(id){
       <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(b.price)}₸</div></div></div>
     </div>
     <div style="margin-bottom:16px"><span class="badge ${STATUS_C[b.status]||'bd-wait'}" style="font-size:13px">${STATUS_L[b.status]||b.status}</span></div>
-    ${canCancel?`<button class="btn btn-rose" onclick="cancelBk('${b.id}')">Отменить запись</button>`:''}
+    ${b.status==='pending'?`<div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn btn-green" onclick="confirmBk('${b.id}')">✓ Подтвердить</button>
+      <button class="btn btn-rose" onclick="cancelBk('${b.id}')">✕ Отменить</button>
+    </div>`:''}
+    ${b.status==='confirmed'?`<div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn btn-acc" onclick="doneBk('${b.id}')">✓ Завершить</button>
+      <button class="btn btn-rose" onclick="cancelBk('${b.id}')">✕ Отменить</button>
+    </div>`:''}
     <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-bkdetail')">Закрыть</button>`;
   openModal('m-bkdetail');
 }
 
+async function confirmBk(id){
+  const bk=BOOKINGS.find(b=>b.id===id);
+  const idx=BOOKINGS.findIndex(b=>b.id===id);
+  if(idx>=0)BOOKINGS[idx].status='confirmed';
+  await fbSet('bookings',id,{status:'confirmed'});
+  if(bk){
+    const svcInfo=`${esc(bk.serviceName)} · ${fmDate(bk.date)} ${bk.time}`;
+    if(bk.clientUid)await writeNotif(bk.clientUid,'client',`✅ Ваша запись подтверждена мастером: ${svcInfo}`,'confirmed',id);
+    if(bk.adminUid)await writeNotif(bk.adminUid,'admin',`✅ Мастер подтвердил запись: ${esc(bk.clientName)}, ${svcInfo}`,'confirmed',id);
+  }
+  closeModal('m-bkdetail');showToast('Запись подтверждена','s');
+  renderFilters();renderSchedList();
+}
+async function doneBk(id){
+  const bk=BOOKINGS.find(b=>b.id===id);
+  const idx=BOOKINGS.findIndex(b=>b.id===id);
+  if(idx>=0)BOOKINGS[idx].status='done';
+  await fbSet('bookings',id,{status:'done'});
+  if(bk?.clientUid)await writeNotif(bk.clientUid,'client',`🌟 Спасибо за визит! ${esc(bk.serviceName)} завершена. До встречи!`,'done',id);
+  closeModal('m-bkdetail');showToast('Запись завершена','s');
+  renderFilters();renderSchedList();
+}
 async function cancelBk(id){
-  tg.showConfirm('Отменить запись? Администратор получит уведомление.',async yes=>{
+  tg.showConfirm('Отменить запись? Клиент и администратор получат уведомление.',async yes=>{
     if(!yes)return;
-    const idx=BOOKINGS.findIndex(b=>b.id===id);if(idx>=0)BOOKINGS[idx].status='cancelled';
+    const bk=BOOKINGS.find(b=>b.id===id);
+    const idx=BOOKINGS.findIndex(b=>b.id===id);
+    if(idx>=0)BOOKINGS[idx].status='cancelled';
     await fbSet('bookings',id,{status:'cancelled',cancelledBy:'master'});
-    closeModal('m-bkdetail');showToast('Запись отменена');renderSchedList();
+    if(bk){
+      const svcInfo=`${esc(bk.serviceName)} · ${fmDate(bk.date)} ${bk.time}`;
+      if(bk.clientUid)await writeNotif(bk.clientUid,'client',`❌ Запись отменена мастером: ${svcInfo}. Свяжитесь со студией.`,'cancelled',id);
+      if(bk.adminUid)await writeNotif(bk.adminUid,'admin',`❌ Мастер ${esc(MY_MASTER?.name||'')} отменил запись: ${esc(bk.clientName)}, ${svcInfo}`,'cancelled',id);
+    }
+    closeModal('m-bkdetail');showToast('Запись отменена');
+    renderFilters();renderSchedList();
   });
 }
 
@@ -463,12 +553,13 @@ async function renderNbTime(){
 }
 function nbSelTime(t){nbData.time=t;nbStep=4;renderNb();}
 function calcSlots(open,close,dur,existing){
+  const step=MY_MASTER?.slotInterval||30;
   const[sh,sm]=open.split(':').map(Number);const[eh,em]=close.split(':').map(Number);
   let cur=sh*60+sm;const end=eh*60+em;const slots=[];
   while(cur+dur<=end){
     const h=String(Math.floor(cur/60)).padStart(2,'0');const m=String(cur%60).padStart(2,'0');const time=`${h}:${m}`;
     const busy=existing.some(b=>{const[bh,bm]=b.time.split(':').map(Number);const bs=bh*60+bm,be=bs+(b.dur||60);return cur<be&&cur+dur>bs;});
-    slots.push({time,busy});cur+=30;
+    slots.push({time,busy});cur+=step;
   }
   return slots;
 }
@@ -486,16 +577,22 @@ async function saveNewBooking(){
   const id='bk_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
   const bk={id,bizId:BIZ.id,salonName:BIZ.name,
     clientId:'manual_'+Date.now(),clientName:nbData.client.name,clientPhone:nbData.client.phone,
-    masterId:MY_MASTER.id,masterName:MY_MASTER.name,
+    clientUid:'',
+    masterId:MY_MASTER.id,masterName:MY_MASTER.name,masterUid:MY_MASTER.uid||UID,
+    adminUid:BIZ.ownerId||'',
     serviceId:nbData.service.id,serviceName:nbData.service.name,
     price:nbData.service.price,dur:nbData.service.dur,
     date:nbData.date,time:nbData.time,status:'confirmed',note:nbData.client.note||'',
     createdAt:new Date().toISOString(),createdBy:'master'};
   await fbSet('bookings',id,bk);
   BOOKINGS.push(bk);
+  // Notify admin about new booking
+  if(BIZ.ownerId)await writeNotif(BIZ.ownerId,'admin',
+    `📋 Мастер ${esc(MY_MASTER.name)} создал запись: ${esc(nbData.client.name)}, ${esc(nbData.service.name)} · ${fmDate(nbData.date)} ${nbData.time}`,
+    'new_booking',id);
   closeModal('m-newbk');showToast('Запись создана','s');
   tg.HapticFeedback.impactOccurred('heavy');
-  renderSchedList();
+  renderFilters();renderSchedList();
 }
 
 // ── INVITES ──
@@ -533,7 +630,7 @@ async function acceptInvite(id){
   await fbSet('master_invites',id,{status:'accepted'});
   const mstDoc=await fbGet('salon_masters',inv.bizId);
   const masters=mstDoc?.masters||[];
-  const newMaster={id:'m_'+UID,bizId:inv.bizId,uid:UID,phone:USER.phone||LINK?.phone||'',name:inv.name||USER.firstName,spec:inv.spec||'',open:inv.open||'09:00',close:inv.close||'19:00',color:masters.length%6};
+  const newMaster={id:'m_'+UID,bizId:inv.bizId,uid:UID,phone:USER.phone||LINK?.phone||'',name:inv.name||USER.firstName,spec:inv.spec||'',open:inv.open||'09:00',close:inv.close||'19:00',workDays:inv.workDays||[1,2,3,4,5],slotInterval:inv.slotInterval||30,color:masters.length%6};
   masters.push(newMaster);
   await fbSet('salon_masters',inv.bizId,{masters});
   await fbSet('users',UID,{salonId:inv.bizId,role:'master'});

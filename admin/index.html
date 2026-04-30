@@ -356,6 +356,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       <div class="qa" onclick="aTab('clients')"><div class="qa-ico">👥</div><div class="qa-lbl">Клиенты</div></div>
       <div class="qa" onclick="aTab('svcs')"><div class="qa-ico">💎</div><div class="qa-lbl">Услуги</div></div>
     </div>
+    <div id="a-pending-section"></div>
     <div class="sec-hdr"><div class="sec-t">Сегодня</div><div class="sec-a" onclick="aTab('sched')">Всё →</div></div>
     <div id="a-today"></div>
   </div>
@@ -530,6 +531,25 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <div class="fld"><label>Конец работы</label><input type="time" id="am-close" value="19:00"></div>
       </div>
     </div>
+    <div class="sec-lbl" style="margin-top:16px">График работы</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px" id="am-days-wrap">
+      <div class="chip on" data-d="1" onclick="toggleMasterDay(this)">Пн</div>
+      <div class="chip on" data-d="2" onclick="toggleMasterDay(this)">Вт</div>
+      <div class="chip on" data-d="3" onclick="toggleMasterDay(this)">Ср</div>
+      <div class="chip on" data-d="4" onclick="toggleMasterDay(this)">Чт</div>
+      <div class="chip on" data-d="5" onclick="toggleMasterDay(this)">Пт</div>
+      <div class="chip" data-d="6" onclick="toggleMasterDay(this)">Сб</div>
+      <div class="chip" data-d="0" onclick="toggleMasterDay(this)">Вс</div>
+    </div>
+    <div class="fld"><label>Интервал слотов (мин)</label>
+      <select id="am-interval">
+        <option value="30">30 мин</option>
+        <option value="60" selected>60 мин</option>
+        <option value="45">45 мин</option>
+        <option value="90">90 мин</option>
+        <option value="120">120 мин</option>
+      </select>
+    </div>
     <button class="btn btn-acc" style="margin-top:16px" onclick="inviteMaster()">Отправить приглашение</button>
     <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-add-master')">Отмена</button>
   </div>
@@ -631,6 +651,18 @@ async function fbQuery(col,...conds){
 }
 async function fbDelete(col,id){if(!FB)return;try{await FB.deleteDoc(FB.doc(FB.db,col,id));}catch{}}
 
+// ── NOTIFICATIONS ──
+async function writeNotif(recipientUid,recipientRole,text,type,bookingId=''){
+  if(!FB||!recipientUid)return;
+  try{
+    const id='n_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+    await FB.setDoc(FB.doc(FB.db,'notifications',id),{
+      recipientUid,recipientRole,text,type,bookingId,sent:false,
+      createdAt:new Date().toISOString()
+    });
+  }catch(e){console.warn('writeNotif',e);}
+}
+
 // ── TELEGRAM ──
 const tg=window.Telegram?.WebApp||{ready:()=>{},expand:()=>{},
   initDataUnsafe:{user:{id:1,first_name:'Тест'}},
@@ -646,6 +678,7 @@ let editSvcId=null,salonImgB64=null,onlineBookingVal=true;
 let nbStep=0,nbData={};
 let clientSearchQ='';
 let curTab='dash';
+let selStatusF='all'; // 'all' or 'pending' (pending = all dates)
 
 // ── UTILS ──
 const g=id=>document.getElementById(id);
@@ -708,6 +741,24 @@ async function boot(){
 }
 
 function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
+
+// ── REAL-TIME SYNC ──
+let _syncInt=null;
+function startSync(){
+  if(_syncInt)clearInterval(_syncInt);
+  _syncInt=setInterval(async()=>{
+    if(!BIZ)return;
+    try{
+      const fresh=await fbQuery('bookings',['bizId','==',BIZ.id]);
+      BOOKINGS=fresh;
+      const cli=await fbQuery('salon_clients',['bizId','==',BIZ.id]);
+      CLIENTS=cli;
+    }catch{}
+    if(curTab==='dash')renderDash();
+    else if(curTab==='sched')renderSchedList();
+    else if(curTab==='clients')renderClients();
+  },3000);
+}
 
 // ── BTYPE GRID ──
 let curBtype='';
@@ -772,6 +823,7 @@ function initDash(){
   if(g('dsh-av'))g('dsh-av').textContent=avLetter(BIZ.name);
   if(g('dsh-greet'))g('dsh-greet').textContent=greet()+',';
   renderDash();
+  startSync();
   showScreen('s-dash');
 }
 
@@ -788,10 +840,23 @@ function renderDash(){
   g('sa-clients').textContent=CLIENTS.length;
   g('notif-dot').style.display=pend.length>0?'block':'none';
   g('apip-s')?.classList.toggle('vis',pend.length>0);
+  // Pending section (all dates)
+  const ps=g('a-pending-section');
+  if(ps){
+    if(pend.length){
+      const pendSorted=pend.slice().sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
+      ps.innerHTML=`<div class="sec-hdr" style="margin-top:0"><div class="sec-t" style="color:var(--amber)">⏳ Ожидают подтверждения (${pend.length})</div><div class="sec-a" onclick="goToPending()">Все →</div></div>`+
+        pendSorted.slice(0,3).map(b=>apptCard(b)).join('')+
+        (pend.length>3?`<div style="text-align:center;padding:6px 0"><button class="btn btn-sm btn-ghost" style="width:auto" onclick="goToPending()">+ ещё ${pend.length-3}</button></div>`:'');
+    } else {
+      ps.innerHTML='';
+    }
+  }
   const tl=g('a-today');
-  const todSorted=tod.sort((a,b)=>a.time.localeCompare(b.time));
+  const todActive=tod.filter(b=>b.status!=='cancelled');
+  const todSorted=todActive.sort((a,b)=>a.time.localeCompare(b.time));
   tl.innerHTML=todSorted.length?todSorted.map(b=>apptCard(b)).join(''):`<div class="empty"><div class="empty-ico">📅</div><div class="empty-txt">Записей на ${selDate===todayStr()?'сегодня':fmDate(selDate)} нет</div></div>`;
-  // Notifications
+  // Notifications modal
   const notifEl=g('notif-list');
   if(notifEl){
     notifEl.innerHTML=pend.length?pend.map(b=>`<div style="background:var(--bg3);border-radius:var(--r);padding:14px;margin-bottom:10px">
@@ -804,6 +869,7 @@ function renderDash(){
     </div>`).join(''):`<div class="empty"><div class="empty-ico">🔔</div><div class="empty-txt">Нет новых уведомлений</div></div>`
   }
 }
+function goToPending(){selStatusF='pending';aTab('sched');}
 
 function apptCard(b){
   const[h,m]=b.time.split(':').map(Number);const em=h*60+m+(b.dur||60);
@@ -843,16 +909,28 @@ function selDateFn(ds,calId){selDate=ds;renderCalStrip(calId);if(calId==='a-cal'
 function renderSched(){renderCalStrip('a-cal2');renderMasterFilter();renderSchedList();}
 function renderMasterFilter(){
   const el=g('a-mf');if(!el)return;
-  el.innerHTML=`<div class="chip${selMasterF==='all'?' on':''}" onclick="selMF('all')">Все</div>`+
+  el.innerHTML=`<div class="chip${selStatusF==='pending'?' on':''}" style="${selStatusF==='pending'?'border-color:var(--amber);background:var(--amber2);color:var(--amber)':''}" onclick="selSF('pending')">⏳ Ожидают</div>`+
+    `<div class="chip${selStatusF==='all'?' on':''}" onclick="selSF('all')">📆 Все даты</div>`+
+    `<div style="width:1px;background:var(--border2);margin:0 2px;flex-shrink:0"></div>`+
+    `<div class="chip${selMasterF==='all'?' on':''}" onclick="selMF('all')">Мастера: все</div>`+
     MASTERS.map(m=>`<div class="chip${selMasterF===m.id?' on':''}" onclick="selMF('${m.id}')">${esc(m.name)}</div>`).join('');
 }
 function selMF(id){selMasterF=id;renderMasterFilter();renderSchedList();}
+function selSF(f){selStatusF=f;renderMasterFilter();renderSchedList();}
 function renderSchedList(){
   const el=g('a-sched-list');if(!el)return;
-  let bks=BOOKINGS.filter(b=>b.date===selDate&&b.status!=='cancelled');
+  let bks;
+  if(selStatusF==='pending'){
+    // Show ALL pending from all dates
+    bks=BOOKINGS.filter(b=>b.status==='pending');
+    bks.sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
+  } else {
+    // Show all statuses for selected date
+    bks=BOOKINGS.filter(b=>b.date===selDate);
+    bks.sort((a,b)=>a.time.localeCompare(b.time));
+  }
   if(selMasterF!=='all')bks=bks.filter(b=>b.masterId===selMasterF);
-  bks.sort((a,b)=>a.time.localeCompare(b.time));
-  el.innerHTML=bks.length?bks.map(b=>apptCard(b)).join(''):`<div class="empty"><div class="empty-ico">📆</div><div class="empty-txt">Записей нет</div></div>`;
+  el.innerHTML=bks.length?bks.map(b=>apptCard(b)).join(''):`<div class="empty"><div class="empty-ico">📆</div><div class="empty-txt">${selStatusF==='pending'?'Нет записей, ожидающих подтверждения':'Записей нет'}</div></div>`;
 }
 
 // ── BOOKING DETAIL ──
@@ -882,12 +960,33 @@ async function openBkDetail(id){
 }
 
 async function confirmBk(id){await updateBk(id,'confirmed');showToast('Запись подтверждена','s');closeModal('m-bk-detail');closeModal('m-notif');}
-async function cancelBk(id){await updateBk(id,'cancelled');showToast('Запись отменена');closeModal('m-bk-detail');closeModal('m-notif');}
+async function cancelBk(id){
+  tg.showConfirm('Отменить запись?',async yes=>{
+    if(!yes)return;
+    await updateBk(id,'cancelled');showToast('Запись отменена');closeModal('m-bk-detail');closeModal('m-notif');
+  });
+}
 async function doneBk(id){await updateBk(id,'done');showToast('Запись завершена','s');closeModal('m-bk-detail');}
 async function updateBk(id,status){
+  const bk=BOOKINGS.find(b=>b.id===id);
   const idx=BOOKINGS.findIndex(b=>b.id===id);
   if(idx>=0)BOOKINGS[idx].status=status;
   await fbSet('bookings',id,{status});
+  // Notifications
+  if(bk){
+    const masterUid=bk.masterUid||(MASTERS.find(m=>m.id===bk.masterId)?.uid)||null;
+    const clientUid=bk.clientUid||null;
+    const svcInfo=`${esc(bk.serviceName)} · ${fmDate(bk.date)} ${bk.time}`;
+    if(status==='confirmed'){
+      if(clientUid)await writeNotif(clientUid,'client',`✅ Ваша запись подтверждена: ${svcInfo}`,'confirmed',id);
+      if(masterUid&&masterUid!==UID)await writeNotif(masterUid,'master',`📅 Запись подтверждена: ${esc(bk.clientName)}, ${svcInfo}`,'confirmed',id);
+    } else if(status==='cancelled'){
+      if(clientUid)await writeNotif(clientUid,'client',`❌ Запись отменена: ${svcInfo}. Свяжитесь со студией.`,'cancelled',id);
+      if(masterUid&&masterUid!==UID)await writeNotif(masterUid,'master',`❌ Запись отменена: ${esc(bk.clientName)}, ${svcInfo}`,'cancelled',id);
+    } else if(status==='done'){
+      if(clientUid)await writeNotif(clientUid,'client',`🌟 Спасибо за визит! ${esc(bk.serviceName)} завершена. Ждём вас снова!`,'done',id);
+    }
+  }
   renderDash();if(curTab==='sched')renderSchedList();
 }
 
@@ -975,20 +1074,21 @@ async function renderNbTime(){
   let existing=[];
   try{const _ex=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',master?.id||''],['date','==',nbData.date]);existing=_ex.filter(b=>b.status!=='cancelled');}catch{}
   const open=master?.open||BIZ.open||'09:00',close=master?.close||BIZ.close||'21:00';
-  const slots=calcSlots(open,close,dur,existing);
+  const slots=calcSlots(open,close,dur,existing,master?.slotInterval||30);
   g('nb-body').innerHTML=`
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(nbData.date)}</div>
     <div class="time-grid">${slots.map(s=>`<div class="ts${s.busy?' busy':''}${nbData.time===s.time?' on':''}" onclick="nbSelTime('${s.time}')">${s.time}</div>`).join('')}</div>`;
 }
 function nbSelTime(t){nbData.time=t;nbStep=5;renderNb();}
-function calcSlots(open,close,dur,existing){
+function calcSlots(open,close,dur,existing,step){
+  const interval=step||dur||30;
   const[sh,sm]=open.split(':').map(Number);const[eh,em]=close.split(':').map(Number);
   let cur=sh*60+sm;const end=eh*60+em;const slots=[];
   while(cur+dur<=end){
     const h=String(Math.floor(cur/60)).padStart(2,'0');const m=String(cur%60).padStart(2,'0');
     const time=`${h}:${m}`;
     const busy=existing.some(b=>{const[bh,bm]=b.time.split(':').map(Number);const bs=bh*60+bm,be=bs+(b.dur||60);return cur<be&&cur+dur>bs;});
-    slots.push({time,busy});cur+=30;
+    slots.push({time,busy});cur+=interval;
   }
   return slots;
 }
@@ -1008,7 +1108,9 @@ async function saveNewBooking(){
   const id='bk_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
   const bk={id,bizId:BIZ.id,salonName:BIZ.name,
     clientId:nbData.client.id,clientName:nbData.client.name,clientPhone:nbData.client.phone||'',
-    masterId:nbData.master.id,masterName:nbData.master.name,
+    clientUid:nbData.client.uid||'',
+    masterId:nbData.master.id,masterName:nbData.master.name,masterUid:nbData.master.uid||'',
+    adminUid:UID,
     serviceId:nbData.service.id,serviceName:nbData.service.name,
     price:nbData.service.price,dur:nbData.service.dur,
     date:nbData.date,time:nbData.time,status:'confirmed',note:'',
@@ -1160,15 +1262,21 @@ function renderMasterList(){
       ${!m.isOwner?`<button class="btn btn-sm btn-rose" style="width:auto" onclick="removeMaster('${m.id}')">✕</button>`:''}
     </div>`).join(''):`<div class="empty"><div class="empty-ico">👩‍💼</div><div class="empty-txt">Мастеров нет. Добавьте первого!</div></div>`;
 }
+function toggleMasterDay(el){el.classList.toggle('on');}
+function getMasterWorkDays(){
+  const days=[];
+  g('am-days-wrap')?.querySelectorAll('.chip').forEach(el=>{if(el.classList.contains('on'))days.push(Number(el.dataset.d));});
+  return days;
+}
 async function inviteMaster(){
   const phone=(g('am-phone')?.value||'').trim().replace(/[\s\-\(\)]/g,'');
   const name=(g('am-name')?.value||'').trim();
   const spec=(g('am-spec')?.value||'').trim();
   if(!phone||!name){showToast('Заполните обязательные поля','e');return;}
-  // Check if master exists in user_links by phone
   const inviteId='inv_'+Date.now();
   const invite={id:inviteId,bizId:BIZ.id,salonName:BIZ.name,salonId:BIZ.id,
     phone,name,spec,open:g('am-open')?.value||'09:00',close:g('am-close')?.value||'19:00',
+    workDays:getMasterWorkDays(),slotInterval:Number(g('am-interval')?.value||60),
     status:'pending',createdAt:new Date().toISOString()};
   await fbSet('master_invites',inviteId,invite);
   closeModal('m-add-master');

@@ -610,12 +610,37 @@ async function boot() {
   renderCatalog();
   showScreen('s-catalog');
   startHeartbeat();
+  startMyBkSync();
 }
 
 // ── HEARTBEAT ──
 function startHeartbeat() {
   const send = () => { if (UID) fbSet('users', UID, { webAppLastSeen: new Date().toISOString() }); };
   send(); setInterval(send, 5000);
+}
+
+// ── NOTIFICATIONS ──
+async function writeNotif(recipientUid, recipientRole, text, type, bookingId='') {
+  if (!recipientUid || !FB) return;
+  const id = 'notif_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  await fbSet('notifications', id, {
+    id, type, recipientUid, recipientRole,
+    text, bookingId, sent: false,
+    createdAt: new Date().toISOString()
+  });
+}
+
+// ── REAL-TIME REFRESH (my bookings) ──
+let _myBkTimer = null;
+function startMyBkSync() {
+  if (_myBkTimer) return;
+  _myBkTimer = setInterval(async () => {
+    const el = document.getElementById('mybk-list');
+    if (!el || !document.getElementById('s-mybookings')?.classList.contains('active')) return;
+    if (!FB || !UID) return;
+    const fresh = await fbQuery('bookings', ['clientId','==',UID]);
+    renderMyBookingsData(fresh);
+  }, 3000);
 }
 
 // ── FAVOURITES ──
@@ -965,14 +990,34 @@ function renderWizConfirm() {
 async function confirmBooking() {
   if (!UID || !wiz.service || !wiz.date || !wiz.time) return;
   const btn = document.querySelector('#wiz-body .btn-acc');
-  if (btn) { btn.disabled = true; btn.textContent = 'Сохранение...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Проверяем...'; }
 
+  // ── Conflict check (fresh data) ──────────────────────────────────────────
+  const freshBks = await fbQuery('bookings',
+    ['bizId','==',curSalonId], ['masterId','==',wiz.master?.id||'m0'], ['date','==',wiz.date]);
+  const conflict = freshBks.filter(b => b.status !== 'cancelled').some(b => {
+    const [bh,bm]=b.time.split(':').map(Number), bs=bh*60+bm, be=bs+(b.dur||60);
+    const [wh,wm]=wiz.time.split(':').map(Number), ws=wh*60+wm, we=ws+(wiz.service.dur||60);
+    return ws < be && we > bs;
+  });
+  if (conflict) {
+    showToast('Это время уже занято, выберите другое','e');
+    if (btn) { btn.disabled = false; btn.textContent = 'Подтвердить запись'; }
+    wizStep = 3; renderWiz();
+    return;
+  }
+
+  if (btn) btn.textContent = 'Сохранение...';
+  const clientName = USER?.name || ((USER?.firstName||'') + ' ' + (USER?.lastName||'')).trim() || 'Клиент';
+  const clientPhone = USER?.phone || LINK?.phone || '';
   const id = 'bk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
   const booking = {
     id, bizId: curSalonId, salonName: curSalon.name,
-    clientId: UID, clientName: USER?.name || USER?.firstName || 'Клиент',
-    clientPhone: USER?.phone || LINK?.phone || '',
+    clientId: UID, clientName,
+    clientPhone,
     masterId: wiz.master?.id || 'm0', masterName: wiz.master?.name || 'Мастер',
+    masterUid: wiz.master?.uid || '',
+    adminUid: curSalon.ownerId || '',
     serviceId: wiz.service.id, serviceName: wiz.service.name,
     price: wiz.service.price, dur: wiz.service.dur,
     date: wiz.date, time: wiz.time, status: 'pending', note: '',
@@ -981,11 +1026,15 @@ async function confirmBooking() {
 
   await fbSet('bookings', id, booking);
 
+  // ── Notify admin and master ───────────────────────────────────────────────
+  const notifText = `📋 Новая запись!\n👤 ${clientName} ${clientPhone}\n✂️ ${wiz.service.name}\n👨‍🎨 ${wiz.master?.name||'Мастер'}\n📅 ${fmDate(wiz.date)}, ${wiz.time}\n🏢 ${curSalon.name}`;
+  if (curSalon.ownerId) await writeNotif(curSalon.ownerId, 'admin', notifText, 'new_booking', id);
+  if (wiz.master?.uid && wiz.master.uid !== curSalon.ownerId)
+    await writeNotif(wiz.master.uid, 'master', notifText, 'new_booking', id);
+
   // Auto-add client to salon's client base (deduplicated by bizId+uid)
   const clientDocId = curSalonId + '_' + UID;
   const existingClient = await fbGet('salon_clients', clientDocId);
-  const clientName = USER?.name || ((USER?.firstName||'') + ' ' + (USER?.lastName||'')).trim() || 'Клиент';
-  const clientPhone = USER?.phone || LINK?.phone || '';
   if (!existingClient) {
     await fbSet('salon_clients', clientDocId, {
       id: clientDocId, bizId: curSalonId,
@@ -1012,34 +1061,49 @@ async function renderMyBookings() {
   let bookings = [];
   if (FB) bookings = await fbQuery('bookings', ['clientId','==',UID]);
   else bookings = ls.get('my_bookings') || [];
+  renderMyBookingsData(bookings);
+}
 
-  bookings.sort((a,b) => {
+function renderMyBookingsData(bookings) {
+  bookings = [...bookings].sort((a,b) => {
     const da = (a.date||'')+(a.time||''), db = (b.date||'')+(b.time||'');
-    return db.localeCompare(da);
+    return db.localeCompare(da); // newest first
   });
 
   const pip = g('bk-pip');
   const upcoming = bookings.filter(b => b.date >= todayStr() && b.status !== 'cancelled' && b.status !== 'done');
   if (pip) pip.classList.toggle('vis', upcoming.length > 0);
 
+  const el = g('mybk-list');
   if (!bookings.length) {
-    g('mybk-list').innerHTML = `<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Вы ещё не записывались ни в один салон</div></div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Вы ещё не записывались ни в один салон</div></div>`;
     return;
   }
 
-  g('mybk-list').innerHTML = bookings.map(b => `
-    <div class="bk-card" onclick="openBkDetail('${b.id}')">
-      <div class="bk-hdr">
-        <div>
-          <div class="bk-salon">${esc(b.salonName)}</div>
-          <div class="bk-date">${fmDate(b.date)}, ${b.time||''}</div>
-        </div>
-        <span class="badge ${STATUS_C[b.status]||'bd-wait'}">${STATUS_L[b.status]||b.status}</span>
+  // Group: upcoming active, then cancelled/done
+  const active = bookings.filter(b => b.status !== 'cancelled' && b.status !== 'done');
+  const past   = bookings.filter(b => b.status === 'cancelled' || b.status === 'done');
+  let html = active.map(b => bkCard(b)).join('');
+  if (past.length) {
+    html += `<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;padding:16px 0 8px;text-transform:uppercase">История</div>`;
+    html += past.map(b => bkCard(b)).join('');
+  }
+  el.innerHTML = html;
+}
+
+function bkCard(b) {
+  return `<div class="bk-card${b.status==='cancelled'?' bk-cancelled':''}" onclick="openBkDetail('${b.id}')">
+    <div class="bk-hdr">
+      <div>
+        <div class="bk-salon">${esc(b.salonName)}</div>
+        <div class="bk-date">${fmDate(b.date)}, ${b.time||''}</div>
       </div>
-      <div class="bk-row">💎 ${esc(b.serviceName)}</div>
-      <div class="bk-row">👤 ${esc(b.masterName)}</div>
-      <div class="bk-price">${fm(b.price)}₸</div>
-    </div>`).join('');
+      <span class="badge ${STATUS_C[b.status]||'bd-wait'}">${STATUS_L[b.status]||b.status}</span>
+    </div>
+    <div class="bk-row">💎 ${esc(b.serviceName)}</div>
+    <div class="bk-row">👤 ${esc(b.masterName)}</div>
+    <div class="bk-price">${fm(b.price)}₸</div>
+  </div>`;
 }
 
 let curBkId = null;
@@ -1066,7 +1130,15 @@ async function openBkDetail(id) {
 async function cancelBooking(id) {
   tg.showConfirm('Отменить запись?', async yes => {
     if (!yes) return;
-    await fbSet('bookings', id, { status: 'cancelled' });
+    const bk = await fbGet('bookings', id);
+    await fbSet('bookings', id, { status: 'cancelled', cancelledBy: 'client' });
+    if (bk) {
+      const clientName = USER?.name || USER?.firstName || 'Клиент';
+      const cancelText = `❌ Клиент отменил запись\n👤 ${clientName}\n✂️ ${bk.serviceName||''}\n👨‍🎨 ${bk.masterName||''}\n📅 ${fmDate(bk.date)}, ${bk.time}`;
+      if (bk.adminUid) await writeNotif(bk.adminUid, 'admin', cancelText, 'cancelled', id);
+      if (bk.masterUid && bk.masterUid !== bk.adminUid)
+        await writeNotif(bk.masterUid, 'master', cancelText, 'cancelled', id);
+    }
     closeModal('m-bkdetail');
     showToast('Запись отменена');
     renderMyBookings();
