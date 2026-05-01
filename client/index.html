@@ -477,11 +477,15 @@ const ls = {
 
 // ── FIREBASE ──
 let FB = null;
-let _authReady = Promise.resolve(); // resolves when anonymous auth completes (or fails)
+// Resolves when anonymous auth is done (or times out after 5s)
+let _authReady = Promise.resolve();
 window.addEventListener('fbReady', () => {
   if (window._fbReady && window._FB) {
     FB = window._FB;
-    _authReady = FB.signInAnonymously(FB.auth).catch(() => {});
+    _authReady = Promise.race([
+      FB.signInAnonymously(FB.auth),
+      new Promise(r => setTimeout(r, 5000)) // 5s max
+    ]).catch(() => {});
   }
 }, { once: true });
 
@@ -575,9 +579,19 @@ function showToast(msg, type='') {
 
 // ── BOOT ──
 window.addEventListener('DOMContentLoaded', async () => {
+  const _t0 = performance.now();
+
+  // Wait for Firebase module to init — max 5 s.
+  // If the module fails to load (CDN blocked, network error, Telegram WebView
+  // restriction), fbReady never fires and _fbReady is never set → we'd hang
+  // forever without this timeout.
   await new Promise(r => {
-    if (window._fbReady !== undefined) return r();
-    window.addEventListener('fbReady', r, { once: true });
+    if (window._fbReady !== undefined) { r(); return; }
+    const guard = setTimeout(() => {
+      window._fbReady = false; // mark as unavailable
+      r();
+    }, 5000);
+    window.addEventListener('fbReady', () => { clearTimeout(guard); r(); }, { once: true });
   });
 
   const sp = new URLSearchParams(location.search);
@@ -594,14 +608,29 @@ window.addEventListener('DOMContentLoaded', async () => {
     UID = ls.get('uid');
   }
 
-  setTimeout(boot, 2200);
+  // Splash animation is 2.3 s. Schedule boot so it runs no earlier than 2.3 s
+  // from page load, but no later than 2.3 s after Firebase is ready.
+  const elapsed = performance.now() - _t0;
+  setTimeout(boot, Math.max(0, 2300 - elapsed));
 });
 
+// Absolute safety net: if splash is still showing after 9 s, force boot.
+// Covers any edge case the above guards miss.
+setTimeout(() => {
+  if (g('s-splash')?.classList.contains('active')) {
+    console.warn('[safety-net] forcing boot after timeout');
+    boot();
+  }
+}, 9000);
+
+let _booting = false;
 async function boot() {
+  if (_booting) return; // prevent double-boot from safety-net
+  _booting = true;
   try {
     if (!UID) { showScreen('s-nouid'); return; }
 
-    // Wait for anonymous auth to complete before any Firestore calls
+    // Wait for anonymous auth (already racing against 5 s timeout)
     await _authReady;
 
     LINK = await fbGet('user_links', UID);
@@ -619,7 +648,7 @@ async function boot() {
     startMyBkSync();
   } catch(e) {
     console.error('[boot]', e);
-    // Fallback: show catalog even if something failed mid-boot
+    // Fallback — show catalog regardless
     try { renderCatalog(); } catch {}
     showScreen('s-catalog');
   }
