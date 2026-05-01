@@ -636,6 +636,23 @@ async function boot() {
     LINK = await fbGet('user_links', UID);
     USER = await fbGet('users', UID);
 
+    // Fallback for users registered via bot before the users/{uid} write was added:
+    // if LINK exists (bot already registered them) but users doc is missing, auto-create it
+    // so they go straight to the catalog without seeing the onboard flow again.
+    if (!USER && LINK) {
+      USER = {
+        uid:       UID,
+        phone:     LINK.phone     || '',
+        firstName: LINK.firstName || '',
+        lastName:  LINK.username  || '',
+        name:      LINK.firstName || '',
+        tgId:      LINK.tgId      || '',
+        role:      'client',
+        createdAt: new Date().toISOString()
+      };
+      try { await fbSet('users', UID, USER); } catch(e) { console.warn('[boot] users auto-create failed', e); }
+    }
+
     if (!USER) { showOnboard(); return; }
 
     const avEl = g('cli-av');
