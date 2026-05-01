@@ -354,16 +354,19 @@ async function findMySalon(phone){
 function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
 
 // ── REAL-TIME SYNC ──
-let _syncInt=null;
+let _syncInt=null,_lastBkHash='';
+function _hashBk(arr){return arr.map(x=>x.id+'|'+(x.status||'')).sort().join(',');}
 function startSync(){
   if(_syncInt)clearInterval(_syncInt);
   _syncInt=setInterval(async()=>{
     if(!BIZ||!MY_MASTER)return;
     try{
       const fresh=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id]);
-      BOOKINGS=fresh;
-    }catch{}
-    if(curTab==='sched'){renderFilters();renderCalStrip();renderSchedList();};
+      const h=_hashBk(fresh);
+      if(h===_lastBkHash)return;
+      _lastBkHash=h;BOOKINGS=fresh;
+    }catch{return;}
+    if(curTab==='sched'){renderFilters();renderCalStrip();renderSchedList();}
   },3000);
 }
 
@@ -384,10 +387,10 @@ function renderSched(){
 function renderFilters(){
   const el=g('m-filters');if(!el)return;
   const pCount=BOOKINGS.filter(b=>b.status==='pending').length;
-  el.innerHTML=
-    `<div class="chip${selStatusF==='pending'?' on':''}" style="${selStatusF==='pending'?'border-color:var(--acc);background:var(--acc3);color:var(--acc)':''}" onclick="selSF('pending')">⏳ Ожидают${pCount>0?' ('+pCount+')':''}</div>`+
-    `<div class="chip${selStatusF==='all'?' on':''}" onclick="selSF('all')">📆 Все даты</div>`;
+  const pOn=selStatusF==='pending';
+  el.innerHTML=`<div class="chip${pOn?' on':''}" style="${pOn?'border-color:var(--acc);background:var(--acc3);color:var(--acc)':''}" onclick="togglePendingF()">⏳ Ожидают${pCount>0?' ('+pCount+')':''}</div>`;
 }
+function togglePendingF(){selStatusF=selStatusF==='pending'?'all':'pending';renderFilters();renderSchedList();tg.HapticFeedback.impactOccurred('light');}
 function selSF(f){selStatusF=f;renderFilters();renderSchedList();tg.HapticFeedback.impactOccurred('light');}
 function renderCalStrip(){
   const el=g('m-cal');if(!el)return;
@@ -453,9 +456,10 @@ async function openBkDetail(id){
       <button class="btn btn-rose" onclick="cancelBk('${b.id}')">✕ Отменить</button>
     </div>`:''}
     ${b.status==='confirmed'?`<div style="display:flex;gap:8px;margin-bottom:8px">
-      <button class="btn btn-acc" onclick="doneBk('${b.id}')">✓ Завершить</button>
+      <button class="btn btn-acc" onclick="showDoneDialog('${b.id}')">✓ Завершить</button>
       <button class="btn btn-rose" onclick="cancelBk('${b.id}')">✕ Отменить</button>
     </div>`:''}
+    <div id="bkd-done-area"></div>
     <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-bkdetail')">Закрыть</button>`;
   openModal('m-bkdetail');
 }
@@ -473,11 +477,31 @@ async function confirmBk(id){
   closeModal('m-bkdetail');showToast('Запись подтверждена','s');
   renderFilters();renderSchedList();
 }
-async function doneBk(id){
+function showDoneDialog(id){
+  const bk=BOOKINGS.find(b=>b.id===id);if(!bk)return;
+  const area=g('bkd-done-area');if(!area)return;
+  area.innerHTML=`
+    <div style="background:var(--bg3);border-radius:var(--r);padding:16px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:12px">Завершение записи</div>
+      <div class="fld" style="margin-bottom:10px"><label>Итоговая сумма (₸)</label>
+        <input type="number" id="done-price" value="${bk.price||0}" style="width:100%;padding:10px 12px;border-radius:var(--rsm);border:1px solid var(--border);background:var(--bg4);color:var(--text);font-size:15px;outline:none">
+      </div>
+      <div class="fld" style="margin-bottom:12px"><label>Способ оплаты</label>
+        <select id="done-pay" style="width:100%;padding:10px 12px;border-radius:var(--rsm);border:1px solid var(--border);background:var(--bg4);color:var(--text);font-size:15px;outline:none">
+          <option value="card">💳 Карта</option>
+          <option value="cash">💵 Наличные</option>
+        </select>
+      </div>
+      <button class="btn btn-acc" onclick="confirmDoneBk('${id}')">✓ Подтвердить завершение</button>
+    </div>`;
+}
+async function confirmDoneBk(id){
+  const finalPrice=Number(g('done-price')?.value)||0;
+  const payMethod=g('done-pay')?.value||'card';
   const bk=BOOKINGS.find(b=>b.id===id);
   const idx=BOOKINGS.findIndex(b=>b.id===id);
-  if(idx>=0)BOOKINGS[idx].status='done';
-  await fbSet('bookings',id,{status:'done'});
+  if(idx>=0){BOOKINGS[idx].status='done';BOOKINGS[idx].price=finalPrice;BOOKINGS[idx].payMethod=payMethod;}
+  await fbSet('bookings',id,{status:'done',price:finalPrice,payMethod});
   if(bk?.clientUid)await writeNotif(bk.clientUid,'client',`🌟 Спасибо за визит! ${esc(bk.serviceName)} завершена. До встречи!`,'done',id);
   closeModal('m-bkdetail');showToast('Запись завершена','s');
   renderFilters();renderSchedList();
@@ -543,22 +567,24 @@ function renderNbDate(){
 function nbSelDate(ds){nbData.date=ds;document.querySelectorAll('#nb-cal .cal-day').forEach(el=>el.classList.remove('on'));event.currentTarget.classList.add('on');}
 async function renderNbTime(){
   g('nb-body').innerHTML=`<div class="spin-center"><div class="spinner"></div></div>`;
-  const dur=nbData.service?.dur||60;
   let existing=[];
   try{const _ex=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id],['date','==',nbData.date]);existing=_ex.filter(b=>b.status!=='cancelled');}catch{}
   const open=MY_MASTER.open||'09:00',close=MY_MASTER.close||'19:00';
-  const slots=calcSlots(open,close,dur,existing);
+  const slots=calcSlots(open,close,null,existing,nbData.date);
   g('nb-body').innerHTML=`<div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(nbData.date)}</div>
     <div class="time-grid">${slots.map(s=>`<div class="ts${s.busy?' busy':''}${nbData.time===s.time?' on':''}" onclick="nbSelTime('${s.time}')">${s.time}</div>`).join('')}</div>`;
 }
 function nbSelTime(t){nbData.time=t;nbStep=4;renderNb();}
-function calcSlots(open,close,dur,existing){
+function calcSlots(open,close,_dur,existing,forDate){
   const step=MY_MASTER?.slotInterval||30;
   const[sh,sm]=open.split(':').map(Number);const[eh,em]=close.split(':').map(Number);
   let cur=sh*60+sm;const end=eh*60+em;const slots=[];
-  while(cur+dur<=end){
+  const isToday=(forDate||todayStr())===todayStr();
+  const now=new Date();const nowMin=isToday?now.getHours()*60+now.getMinutes():-1;
+  while(cur<=end){
     const h=String(Math.floor(cur/60)).padStart(2,'0');const m=String(cur%60).padStart(2,'0');const time=`${h}:${m}`;
-    const busy=existing.some(b=>{const[bh,bm]=b.time.split(':').map(Number);const bs=bh*60+bm,be=bs+(b.dur||60);return cur<be&&cur+dur>bs;});
+    const isPast=cur<=nowMin;
+    const busy=isPast||existing.some(b=>b.time===time);
     slots.push({time,busy});cur+=step;
   }
   return slots;
@@ -667,7 +693,7 @@ function renderProf(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
       ${['today','week','month'].slice(0,2).map((p,i)=>{const bks=p==='today'?BOOKINGS.filter(b=>b.date===todayStr()):BOOKINGS;const done=bks.filter(b=>b.status==='done');const rev=done.reduce((s,b)=>s+Number(b.price),0);return `<div style="background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:16px"><div style="font-size:11px;color:var(--text2);margin-bottom:6px">${i===0?'Сегодня':'За всё время'}</div><div style="font-family:var(--mono);font-size:24px;font-weight:500">${done.length}</div><div style="font-size:11px;color:var(--acc);margin-top:2px">${i===0?'записей':'завершено'}</div></div>`;}).join('')}
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">Zap is... · v1.0 · Master</div>`;
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">Zap is... · by @mathian</div>`;
 }
 </script>
 </body>

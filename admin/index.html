@@ -497,10 +497,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <div class="modal-title" id="asvc-title">Новая услуга</div>
     <div class="fg">
       <div class="fld"><label>Название</label><input type="text" id="as-name" placeholder="Стрижка, маникюр..."></div>
-      <div class="fr">
-        <div class="fld"><label>Цена (₸)</label><input type="number" id="as-price" placeholder="3000" min="0"></div>
-        <div class="fld"><label>Длительность (мин)</label><input type="number" id="as-dur" placeholder="60" min="15" step="15"></div>
-      </div>
+      <div class="fld"><label>Цена (₸)</label><input type="number" id="as-price" placeholder="3000" min="0"></div>
       <div class="fld"><label>Категория</label>
         <select id="as-cat">
           <option value="hair">✂️ Волосы</option><option value="nails">💅 Ногти</option>
@@ -565,6 +562,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       <input type="file" accept="image/*" onchange="handleSalonImg(event)">
       <div class="img-upload-hint">JPG или PNG, рекомендуется 800×400 px</div>
     </div>
+    <button class="btn btn-rose" id="salon-del-img-btn" style="margin-top:8px;display:none" onclick="removeSalonImg()">🗑 Удалить фото</button>
     <div class="fg" style="margin-top:16px">
       <div class="fld"><label>Название студии</label><input type="text" id="ss-name"></div>
       <div class="fld"><label>Адрес</label><input type="text" id="ss-addr" placeholder="ул. Примерная, д. 1"></div>
@@ -743,20 +741,27 @@ async function boot(){
 function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
 
 // ── REAL-TIME SYNC ──
-let _syncInt=null;
+let _syncInt=null,_lastBkHash='',_lastCliHash='';
+function _hashBk(arr){return arr.map(x=>x.id+'|'+(x.status||'')).sort().join(',');}
 function startSync(){
   if(_syncInt)clearInterval(_syncInt);
   _syncInt=setInterval(async()=>{
     if(!BIZ)return;
     try{
       const fresh=await fbQuery('bookings',['bizId','==',BIZ.id]);
-      BOOKINGS=fresh;
+      const bkH=_hashBk(fresh);
+      const bkChanged=bkH!==_lastBkHash;
+      if(bkChanged){BOOKINGS=fresh;_lastBkHash=bkH;}
       const cli=await fbQuery('salon_clients',['bizId','==',BIZ.id]);
-      CLIENTS=cli;
+      const cliH=_hashBk(cli);
+      const cliChanged=cliH!==_lastCliHash;
+      if(cliChanged){CLIENTS=cli;_lastCliHash=cliH;}
+      if(bkChanged||cliChanged){
+        if(curTab==='dash')renderDash();
+        else if(curTab==='sched'){renderMasterFilter();renderSchedList();}
+        else if(curTab==='clients')renderClients();
+      }
     }catch{}
-    if(curTab==='dash')renderDash();
-    else if(curTab==='sched')renderSchedList();
-    else if(curTab==='clients')renderClients();
   },3000);
 }
 
@@ -872,10 +877,8 @@ function renderDash(){
 function goToPending(){selStatusF='pending';aTab('sched');}
 
 function apptCard(b){
-  const[h,m]=b.time.split(':').map(Number);const em=h*60+m+(b.dur||60);
-  const eh=String(Math.floor(em/60)).padStart(2,'0');const emm=String(em%60).padStart(2,'0');
   return `<div class="appt-slot" onclick="openBkDetail('${b.id}')">
-    <div class="appt-time"><div class="appt-t1">${b.time}</div><div class="appt-t2">${eh}:${emm}</div></div>
+    <div class="appt-time"><div class="appt-t1">${b.time}</div><div class="appt-t2">${b.date!==selDate?fmDate(b.date).split(' ').slice(0,2).join(' '):''}</div></div>
     <div class="appt-div"></div>
     <div class="appt-info">
       <div class="appt-client">${esc(b.clientName)}</div>
@@ -885,7 +888,7 @@ function apptCard(b){
         <span style="font-size:11px;color:var(--text3)">${esc(b.masterName||'')}</span>
       </div>
     </div>
-    <div class="appt-r"><div class="appt-price">${fm(b.price)}₸</div><div class="appt-dur">${b.dur||60}мин</div></div>
+    <div class="appt-r"><div class="appt-price">${fm(b.price)}₸</div></div>
   </div>`;
 }
 
@@ -909,12 +912,14 @@ function selDateFn(ds,calId){selDate=ds;renderCalStrip(calId);if(calId==='a-cal'
 function renderSched(){renderCalStrip('a-cal2');renderMasterFilter();renderSchedList();}
 function renderMasterFilter(){
   const el=g('a-mf');if(!el)return;
-  el.innerHTML=`<div class="chip${selStatusF==='pending'?' on':''}" style="${selStatusF==='pending'?'border-color:var(--amber);background:var(--amber2);color:var(--amber)':''}" onclick="selSF('pending')">⏳ Ожидают</div>`+
-    `<div class="chip${selStatusF==='all'?' on':''}" onclick="selSF('all')">📆 Все даты</div>`+
-    `<div style="width:1px;background:var(--border2);margin:0 2px;flex-shrink:0"></div>`+
-    `<div class="chip${selMasterF==='all'?' on':''}" onclick="selMF('all')">Мастера: все</div>`+
+  const pCount=BOOKINGS.filter(b=>b.status==='pending').length;
+  const pOn=selStatusF==='pending';
+  el.innerHTML=`<div class="chip${pOn?' on':''}" style="${pOn?'border-color:var(--amber);background:var(--amber2);color:var(--amber)':''}" onclick="togglePendingF()">⏳ Ожидают${pCount>0?' ('+pCount+')':''}</div>`+
+    `<div style="width:1px;background:var(--border2);margin:0 4px;flex-shrink:0"></div>`+
+    `<div class="chip${selMasterF==='all'?' on':''}" onclick="selMF('all')">Все</div>`+
     MASTERS.map(m=>`<div class="chip${selMasterF===m.id?' on':''}" onclick="selMF('${m.id}')">${esc(m.name)}</div>`).join('');
 }
+function togglePendingF(){selStatusF=selStatusF==='pending'?'all':'pending';renderMasterFilter();renderSchedList();tg.HapticFeedback.impactOccurred('light');}
 function selMF(id){selMasterF=id;renderMasterFilter();renderSchedList();}
 function selSF(f){selStatusF=f;renderMasterFilter();renderSchedList();}
 function renderSchedList(){
@@ -939,11 +944,11 @@ async function openBkDetail(id){
   if(!b)return;
   g('bkd-body').innerHTML=`
     <div class="bconf">
-      <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Клиент</div><div class="bc-val">${esc(b.clientName)}</div><div style="font-size:12px;color:var(--text2)">${esc(b.clientPhone)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Клиент</div><div class="bc-val">${esc(b.clientName)}</div><div style="font-size:12px;color:var(--text2)">${esc(b.clientPhone||'')}</div></div></div>
       <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(b.serviceName)}</div></div></div>
       <div class="bc-row"><div class="bc-ico">👩‍💼</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">${esc(b.masterName)}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(b.date)}, ${b.time} (${b.dur}мин)</div></div></div>
-      <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(b.price)}₸</div></div></div>
+      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(b.date)}, ${b.time}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(b.price)}₸${b.payMethod?` · ${b.payMethod==='cash'?'💵 Наличные':'💳 Карта'}`:''}</div></div></div>
       ${b.note?`<div class="bc-row"><div class="bc-ico">📝</div><div><div class="bc-lbl">Заметка</div><div class="bc-val">${esc(b.note)}</div></div></div>`:''}
     </div>
     <div style="margin-bottom:16px"><span class="badge ${STATUS_C[b.status]||'bd-wait'}" style="font-size:13px">${STATUS_L[b.status]||b.status}</span></div>
@@ -952,7 +957,7 @@ async function openBkDetail(id){
       <button class="btn btn-rose" onclick="cancelBk('${b.id}')">✕ Отменить</button>
     </div>`:''}
     ${b.status==='confirmed'?`<div style="display:flex;gap:8px;margin-bottom:8px">
-      <button class="btn btn-teal" onclick="doneBk('${b.id}')">✓ Завершить</button>
+      <button class="btn btn-teal" onclick="showDoneDialog('${b.id}')">✓ Завершить</button>
       <button class="btn btn-rose" onclick="cancelBk('${b.id}')">✕ Отменить</button>
     </div>`:''}
     <button class="btn btn-out" onclick="closeModal('m-bk-detail')">Закрыть</button>`;
@@ -966,13 +971,46 @@ async function cancelBk(id){
     await updateBk(id,'cancelled');showToast('Запись отменена');closeModal('m-bk-detail');closeModal('m-notif');
   });
 }
-async function doneBk(id){await updateBk(id,'done');showToast('Запись завершена','s');closeModal('m-bk-detail');}
+function showDoneDialog(id){
+  const bk=BOOKINGS.find(b=>b.id===id);if(!bk)return;
+  g('bkd-body').innerHTML=`
+    <div class="bconf" style="margin-bottom:16px">
+      <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Клиент</div><div class="bc-val">${esc(bk.clientName)}</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(bk.serviceName)}</div></div></div>
+    </div>
+    <div class="fg" style="margin-bottom:16px">
+      <div class="fld"><label>Итоговая сумма (₸)</label><input type="number" id="done-price" value="${bk.price||0}" min="0" style="font-size:18px;font-weight:700"></div>
+      <div class="fld"><label>Способ оплаты</label>
+        <select id="done-pay">
+          <option value="card">💳 Карта</option>
+          <option value="cash">💵 Наличные</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-teal" onclick="confirmDoneBk('${id}')">✓ Завершить и сохранить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="openBkDetail('${id}')">← Назад</button>`;
+}
+async function confirmDoneBk(id){
+  const finalPrice=Number(g('done-price')?.value)||0;
+  const payMethod=g('done-pay')?.value||'card';
+  const bk=BOOKINGS.find(b=>b.id===id);
+  const idx=BOOKINGS.findIndex(b=>b.id===id);
+  if(idx>=0){BOOKINGS[idx].status='done';BOOKINGS[idx].price=finalPrice;BOOKINGS[idx].payMethod=payMethod;}
+  await fbSet('bookings',id,{status:'done',price:finalPrice,payMethod});
+  if(bk){
+    const masterUid=bk.masterUid||(MASTERS.find(m=>m.id===bk.masterId)?.uid)||null;
+    if(bk.clientUid)await writeNotif(bk.clientUid,'client',`🌟 Спасибо за визит! ${esc(bk.serviceName)} завершена. Ждём вас снова!`,'done',id);
+    if(masterUid&&masterUid!==UID)await writeNotif(masterUid,'master',`✅ Завершено: ${esc(bk.clientName)}, ${esc(bk.serviceName)} · ${fm(finalPrice)}₸`,'done',id);
+  }
+  closeModal('m-bk-detail');showToast('Запись завершена','s');
+  renderDash();if(curTab==='sched'){renderMasterFilter();renderSchedList();}
+}
+async function doneBk(id){showDoneDialog(id);}
 async function updateBk(id,status){
   const bk=BOOKINGS.find(b=>b.id===id);
   const idx=BOOKINGS.findIndex(b=>b.id===id);
   if(idx>=0)BOOKINGS[idx].status=status;
   await fbSet('bookings',id,{status});
-  // Notifications
   if(bk){
     const masterUid=bk.masterUid||(MASTERS.find(m=>m.id===bk.masterId)?.uid)||null;
     const clientUid=bk.clientUid||null;
@@ -983,11 +1021,9 @@ async function updateBk(id,status){
     } else if(status==='cancelled'){
       if(clientUid)await writeNotif(clientUid,'client',`❌ Запись отменена: ${svcInfo}. Свяжитесь со студией.`,'cancelled',id);
       if(masterUid&&masterUid!==UID)await writeNotif(masterUid,'master',`❌ Запись отменена: ${esc(bk.clientName)}, ${svcInfo}`,'cancelled',id);
-    } else if(status==='done'){
-      if(clientUid)await writeNotif(clientUid,'client',`🌟 Спасибо за визит! ${esc(bk.serviceName)} завершена. Ждём вас снова!`,'done',id);
     }
   }
-  renderDash();if(curTab==='sched')renderSchedList();
+  renderDash();if(curTab==='sched'){renderMasterFilter();renderSchedList();}
 }
 
 // ── NEW BOOKING ──
@@ -1040,7 +1076,7 @@ function renderNbSvc(){
   g('nb-body').innerHTML=SERVICES.map(s=>`
     <div class="svc-item${nbData.service?.id===s.id?' sel':''}" style="cursor:pointer" onclick="nbSelSvc('${s.id}')">
       <div class="svc-ico">${CAT_ICONS[s.cat]||'✦'}</div>
-      <div class="svc-info"><div class="svc-name">${esc(s.name)}</div><div class="svc-dur">${s.dur} мин</div></div>
+      <div class="svc-info"><div class="svc-name">${esc(s.name)}</div></div>
       <div class="svc-price">${fm(s.price)}₸</div>
     </div>`).join('');
 }
@@ -1070,24 +1106,28 @@ function renderNbDate(){
 function nbSelDate(ds){nbData.date=ds;document.querySelectorAll('#nb-cal .cal-day').forEach(el=>el.classList.remove('on'));event.currentTarget.classList.add('on');}
 async function renderNbTime(){
   g('nb-body').innerHTML=`<div class="spin-center"><div class="spinner"></div></div>`;
-  const master=nbData.master;const dur=nbData.service?.dur||60;
+  const master=nbData.master;
   let existing=[];
   try{const _ex=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',master?.id||''],['date','==',nbData.date]);existing=_ex.filter(b=>b.status!=='cancelled');}catch{}
   const open=master?.open||BIZ.open||'09:00',close=master?.close||BIZ.close||'21:00';
-  const slots=calcSlots(open,close,dur,existing,master?.slotInterval||30);
+  const slots=calcSlots(open,close,existing,master?.slotInterval||60,nbData.date);
+  if(!slots.length){g('nb-body').innerHTML=`<div class="empty"><div class="empty-ico">🕐</div><div class="empty-txt">Нет доступных слотов на эту дату</div></div>`;return;}
   g('nb-body').innerHTML=`
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(nbData.date)}</div>
-    <div class="time-grid">${slots.map(s=>`<div class="ts${s.busy?' busy':''}${nbData.time===s.time?' on':''}" onclick="nbSelTime('${s.time}')">${s.time}</div>`).join('')}</div>`;
+    <div class="time-grid">${slots.map(s=>`<div class="ts${s.busy?' busy':''}${nbData.time===s.time?' on':''}" onclick="${s.busy?'':("nbSelTime('"+s.time+"')")}">${s.time}</div>`).join('')}</div>`;
 }
 function nbSelTime(t){nbData.time=t;nbStep=5;renderNb();}
-function calcSlots(open,close,dur,existing,step){
-  const interval=step||dur||30;
+function calcSlots(open,close,existing,step,forDate){
+  const interval=step||60;
   const[sh,sm]=open.split(':').map(Number);const[eh,em]=close.split(':').map(Number);
   let cur=sh*60+sm;const end=eh*60+em;const slots=[];
-  while(cur+dur<=end){
+  const isToday=(forDate||todayStr())===todayStr();
+  const now=new Date();const nowMin=isToday?now.getHours()*60+now.getMinutes():-1;
+  while(cur<=end){
     const h=String(Math.floor(cur/60)).padStart(2,'0');const m=String(cur%60).padStart(2,'0');
     const time=`${h}:${m}`;
-    const busy=existing.some(b=>{const[bh,bm]=b.time.split(':').map(Number);const bs=bh*60+bm,be=bs+(b.dur||60);return cur<be&&cur+dur>bs;});
+    const isPast=cur<=nowMin;
+    const busy=isPast||existing.some(b=>b.time===time);
     slots.push({time,busy});cur+=interval;
   }
   return slots;
@@ -1099,7 +1139,7 @@ function renderNbConfirm(){
       <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(nbData.service?.name)}</div></div></div>
       <div class="bc-row"><div class="bc-ico">👩‍💼</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">${esc(nbData.master?.name)}</div></div></div>
       <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(nbData.date)}, ${nbData.time}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(nbData.service?.price)}₸ · ${nbData.service?.dur}мин</div></div></div>
+      <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(nbData.service?.price)}₸</div></div></div>
     </div>
     <button class="btn btn-acc" onclick="saveNewBooking()">Записать</button>
     <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-new-booking')">Отмена</button>`;
@@ -1112,11 +1152,16 @@ async function saveNewBooking(){
     masterId:nbData.master.id,masterName:nbData.master.name,masterUid:nbData.master.uid||'',
     adminUid:UID,
     serviceId:nbData.service.id,serviceName:nbData.service.name,
-    price:nbData.service.price,dur:nbData.service.dur,
+    price:nbData.service.price,
     date:nbData.date,time:nbData.time,status:'confirmed',note:'',
     createdAt:new Date().toISOString(),createdBy:'admin'};
   await fbSet('bookings',id,bk);
   BOOKINGS.push(bk);
+  // Уведомить клиента и мастера
+  if(bk.clientUid)await writeNotif(bk.clientUid,'client',
+    `📅 Вас записали: ${esc(bk.serviceName)} · ${fmDate(bk.date)} ${bk.time} к ${esc(bk.masterName)} в ${esc(BIZ.name)}`,'new_booking',id);
+  if(bk.masterUid&&bk.masterUid!==UID)await writeNotif(bk.masterUid,'master',
+    `📋 Новая запись: ${esc(bk.clientName)}, ${esc(bk.serviceName)} · ${fmDate(bk.date)} ${bk.time}`,'new_booking',id);
   closeModal('m-new-booking');
   showToast('Запись создана','s');
   tg.HapticFeedback.impactOccurred('heavy');
@@ -1177,16 +1222,19 @@ function openClientDetail(id){
     <div class="fg" style="margin-bottom:16px">
       <div class="fld"><label>Внутреннее имя (видит только администратор)</label><input type="text" id="cd-alias" value="${esc(c.alias||'')}" placeholder="Псевдоним..."></div>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:8px">
+    <div style="margin-bottom:8px">
       <button class="btn btn-acc" onclick="saveClientAlias('${c.id}')">Сохранить</button>
-      <button class="btn btn-sm btn-acc" style="width:auto;flex:none" onclick="openNewBooking()">Записать</button>
     </div>
     <button class="btn ${blocked?'btn-green':'btn-rose'}" style="margin-top:4px" onclick="toggleBlockClient('${c.id}')">${blocked?'🔓 Разблокировать':'🚫 Заблокировать запись'}</button>
     <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-client-detail')">Закрыть</button>
-    <div style="margin-top:20px"><div class="sec-t" style="margin-bottom:12px">ИСТОРИЯ ЗАПИСЕЙ</div>${bks.slice(0,6).map(b=>`<div style="background:var(--bg3);border-radius:var(--rsm);padding:12px 14px;margin-bottom:8px;font-size:13px">
-      <div style="font-weight:700;margin-bottom:2px">${esc(b.serviceName)}</div>
-      <div style="color:var(--text2)">${fmDate(b.date)} · ${fm(b.price)}₸</div>
-    </div>`).join('')}</div>`;
+    <div style="margin-top:20px"><div class="sec-t" style="margin-bottom:12px">ИСТОРИЯ ЗАПИСЕЙ</div>${bks.slice(0,6).map(b=>{
+      const stMap={pending:'⏳ Ожидает',confirmed:'✅ Подтверждено',done:'✔ Завершено',cancelled:'✕ Отменено'};
+      const stLabel=stMap[b.status]||b.status||'';
+      return `<div style="background:var(--bg3);border-radius:var(--rsm);padding:12px 14px;margin-bottom:8px;font-size:13px">
+        <div style="font-weight:700;margin-bottom:2px">${esc(b.serviceName)}</div>
+        <div style="color:var(--text2)">${fmDate(b.date)} · ${fm(b.price)}₸</div>
+        <div style="font-size:11px;margin-top:4px;color:var(--text3)">${stLabel}</div>
+      </div>`;}).join('')}</div>`;
   openModal('m-client-detail');
 }
 async function saveClientAlias(id){
@@ -1222,27 +1270,27 @@ function renderSvcList(){
   el.innerHTML=SERVICES.length?SERVICES.map(s=>`
     <div class="svc-item">
       <div class="svc-ico">${CAT_ICONS[s.cat]||'✦'}</div>
-      <div class="svc-info"><div class="svc-name">${esc(s.name)}</div><div class="svc-dur">${s.dur} мин</div></div>
+      <div class="svc-info"><div class="svc-name">${esc(s.name)}</div></div>
       <div class="svc-price">${fm(s.price)}₸</div>
       <button class="btn btn-sm btn-ghost" style="width:auto;margin-left:8px" onclick="editSvc('${s.id}')">✎</button>
     </div>`).join(''):`<div class="empty"><div class="empty-ico">💎</div><div class="empty-txt">Услуг пока нет</div></div>`;
 }
 let editingSvcId=null;
-function openAddSvc(){editingSvcId=null;g('asvc-title').textContent='Новая услуга';g('asvc-btn').textContent='Добавить';g('as-name').value='';g('as-price').value='';g('as-dur').value='';openModal('m-add-svc');}
+function openAddSvc(){editingSvcId=null;g('asvc-title').textContent='Новая услуга';g('asvc-btn').textContent='Добавить';g('as-name').value='';g('as-price').value='';openModal('m-add-svc');}
 function editSvc(id){
   editingSvcId=id;const s=SERVICES.find(svc=>svc.id===id);if(!s)return;
   g('asvc-title').textContent='Редактировать услугу';g('asvc-btn').textContent='Сохранить';
-  g('as-name').value=s.name;g('as-price').value=s.price;g('as-dur').value=s.dur;g('as-cat').value=s.cat||'other';
+  g('as-name').value=s.name;g('as-price').value=s.price;g('as-cat').value=s.cat||'other';
   openModal('m-add-svc');
 }
 async function saveService(){
-  const name=(g('as-name')?.value||'').trim();const price=Number(g('as-price')?.value)||0;const dur=Number(g('as-dur')?.value)||60;const cat=g('as-cat')?.value||'other';
+  const name=(g('as-name')?.value||'').trim();const price=Number(g('as-price')?.value)||0;const cat=g('as-cat')?.value||'other';
   if(!name){showToast('Введите название','e');return;}
   if(editingSvcId){
     const idx=SERVICES.findIndex(s=>s.id===editingSvcId);
-    if(idx>=0)SERVICES[idx]={...SERVICES[idx],name,price,dur,cat};
+    if(idx>=0)SERVICES[idx]={...SERVICES[idx],name,price,cat};
   } else {
-    SERVICES.push({id:'s_'+Date.now(),bizId:BIZ.id,name,price,dur,cat});
+    SERVICES.push({id:'s_'+Date.now(),bizId:BIZ.id,name,price,cat});
   }
   await fbSet('salon_services',BIZ.id,{services:SERVICES});
   closeModal('m-add-svc');showToast('Сохранено','s');renderSvcList();
@@ -1303,16 +1351,24 @@ function openSalonSettings(){
   onlineBookingVal=BIZ.onlineBooking!==false;
   g('ss-online-toggle')?.classList.toggle('on',onlineBookingVal);
   const prev=g('salon-img-preview');
-  if(BIZ.img)prev.innerHTML=`<img src="${BIZ.img}" alt="">`;
-  else prev.innerHTML=`<span style="font-size:50px">${BIZ.icon||'🏠'}</span>`;
+  if(BIZ.img){prev.innerHTML=`<img src="${BIZ.img}" alt="">`;if(g('salon-del-img-btn'))g('salon-del-img-btn').style.display='';}
+  else{prev.innerHTML=`<span style="font-size:50px">${BIZ.icon||'🏠'}</span>`;if(g('salon-del-img-btn'))g('salon-del-img-btn').style.display='none';}
   openModal('m-salon-settings');
 }
 function toggleOnlineBooking(){onlineBookingVal=!onlineBookingVal;g('ss-online-toggle')?.classList.toggle('on',onlineBookingVal);}
 function handleSalonImg(e){
   const f=e.target.files[0];if(!f)return;
   const r=new FileReader();
-  r.onload=ev=>{salonImgB64=ev.target.result;g('salon-img-preview').innerHTML=`<img src="${ev.target.result}" alt="">`;};
+  r.onload=ev=>{salonImgB64=ev.target.result;g('salon-img-preview').innerHTML=`<img src="${ev.target.result}" alt="">`;if(g('salon-del-img-btn'))g('salon-del-img-btn').style.display='';};
   r.readAsDataURL(f);
+}
+async function removeSalonImg(){
+  salonImgB64=null;
+  g('salon-img-preview').innerHTML=`<span style="font-size:50px">${BIZ.icon||'🏠'}</span>`;
+  if(g('salon-del-img-btn'))g('salon-del-img-btn').style.display='none';
+  BIZ.img='';
+  await fbSet('salons',BIZ.id,{img:''});
+  showToast('Фото удалено','s');
 }
 async function saveSalonSettings(){
   const updates={name:g('ss-name').value.trim(),addr:g('ss-addr').value.trim(),phone:g('ss-phone').value.trim(),instagram:g('ss-ig').value.trim(),open:g('ss-open').value,close:g('ss-close').value,onlineBooking:onlineBookingVal};
@@ -1326,30 +1382,55 @@ async function saveSalonSettings(){
 
 // ── ANALYTICS ──
 function openAnalytics(){
-  const allBks=BOOKINGS;
-  const done=allBks.filter(b=>b.status==='done');
+  const today=todayStr();
+  const monthAgo=new Date();monthAgo.setDate(monthAgo.getDate()-30);
+  const fromDef=dateStr(monthAgo);
+  const masterOpts=`<option value="all">Все мастера</option>`+MASTERS.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  g('analytics-body').innerHTML=`
+    <div style="background:var(--bg3);border-radius:var(--r);padding:14px;margin-bottom:14px">
+      <div class="sec-t" style="margin-bottom:10px">ПЕРИОД И ФИЛЬТР</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <input type="date" id="an-from" value="${fromDef}" style="flex:1;min-width:110px;padding:8px 10px;border-radius:var(--rsm);border:1px solid var(--border);background:var(--bg4);color:var(--text);font-size:13px;outline:none">
+        <span style="color:var(--text3)">—</span>
+        <input type="date" id="an-to" value="${today}" style="flex:1;min-width:110px;padding:8px 10px;border-radius:var(--rsm);border:1px solid var(--border);background:var(--bg4);color:var(--text);font-size:13px;outline:none">
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="an-master" style="flex:1;padding:8px 10px;border-radius:var(--rsm);border:1px solid var(--border);background:var(--bg4);color:var(--text);font-size:13px;outline:none">${masterOpts}</select>
+        <button class="btn btn-acc" style="width:auto;flex:none" onclick="renderAnalyticsData()">Применить</button>
+      </div>
+    </div>
+    <div id="an-results"></div>
+    <button class="btn btn-out" style="margin-top:16px" onclick="closeModal('m-analytics')">Закрыть</button>`;
+  openModal('m-analytics');
+  renderAnalyticsData();
+}
+function renderAnalyticsData(){
+  const from=g('an-from')?.value||'';
+  const to=g('an-to')?.value||'';
+  const mId=g('an-master')?.value||'all';
+  let bks=BOOKINGS.filter(b=>(!from||b.date>=from)&&(!to||b.date<=to));
+  if(mId!=='all')bks=bks.filter(b=>b.masterId===mId);
+  const done=bks.filter(b=>b.status==='done');
   const total=done.reduce((s,b)=>s+Number(b.price),0);
   const byMaster={};done.forEach(b=>{if(!byMaster[b.masterName])byMaster[b.masterName]={name:b.masterName,count:0,rev:0};byMaster[b.masterName].count++;byMaster[b.masterName].rev+=Number(b.price);});
   const bySvc={};done.forEach(b=>{if(!bySvc[b.serviceName])bySvc[b.serviceName]={name:b.serviceName,count:0};bySvc[b.serviceName].count++;});
-  g('analytics-body').innerHTML=`
+  g('an-results').innerHTML=`
     <div class="stat-grid">
-      <div class="stat-card s-acc"><div class="stat-lbl">Всего записей</div><div class="stat-v">${allBks.length}</div></div>
+      <div class="stat-card s-acc"><div class="stat-lbl">Всего записей</div><div class="stat-v">${bks.length}</div></div>
       <div class="stat-card s-teal"><div class="stat-lbl">Выручка</div><div class="stat-v">${fm(total)}₸</div></div>
       <div class="stat-card s-amb"><div class="stat-lbl">Завершено</div><div class="stat-v">${done.length}</div></div>
       <div class="stat-card s-rose"><div class="stat-lbl">Клиентов</div><div class="stat-v">${CLIENTS.length}</div></div>
     </div>
-    <div class="sec-t" style="margin-bottom:10px">ПО МАСТЕРАМ</div>
+    ${mId==='all'?`<div class="sec-t" style="margin-bottom:10px">ПО МАСТЕРАМ</div>
     ${Object.values(byMaster).sort((a,b)=>b.rev-a.rev).map(m=>`<div style="background:var(--bg3);border-radius:var(--rsm);padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between">
       <div><div style="font-size:14px;font-weight:600">${esc(m.name)}</div><div style="font-size:12px;color:var(--text2)">${m.count} записей</div></div>
       <div style="font-family:var(--mono);font-size:16px;font-weight:500;color:var(--acc)">${fm(m.rev)}₸</div>
-    </div>`).join('')}
+    </div>`).join('')}`:''}
     <div class="sec-t" style="margin-top:16px;margin-bottom:10px">ПОПУЛЯРНЫЕ УСЛУГИ</div>
     ${Object.values(bySvc).sort((a,b)=>b.count-a.count).slice(0,5).map(s=>`<div style="background:var(--bg3);border-radius:var(--rsm);padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between">
       <div style="font-size:14px;font-weight:600">${esc(s.name)}</div>
       <div style="font-size:13px;color:var(--text2)">${s.count} раз</div>
-    </div>`).join('')}
-    <button class="btn btn-out" style="margin-top:16px" onclick="closeModal('m-analytics')">Закрыть</button>`;
-  openModal('m-analytics');
+    </div>`).join('')}`;
 }
 
 // ── PROFILE ──
@@ -1376,26 +1457,48 @@ function renderProf(){
       <button class="menu-item" onclick="openAnalytics()"><div class="menu-ico mi-t">📊</div><div class="menu-txt">Аналитика</div><span class="menu-arr">›</span></button>
       <button class="menu-item" onclick="openSalaryCalc()"><div class="menu-ico mi-b">💵</div><div class="menu-txt">Расчёт зарплаты</div><span class="menu-arr">›</span></button>
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">Zap is... · v1.0 · Admin</div>`;
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">Zap is... · by @mathian</div>`;
 }
 
 function openSalaryCalc(){
+  const today=todayStr();
+  const monthAgo=new Date();monthAgo.setDate(monthAgo.getDate()-30);
+  const fromDef=dateStr(monthAgo);
+  g('analytics-body').innerHTML=`
+    <div style="background:var(--bg3);border-radius:var(--r);padding:14px;margin-bottom:14px">
+      <div class="sec-t" style="margin-bottom:10px">ПЕРИОД</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="date" id="sal-from" value="${fromDef}" style="flex:1;min-width:120px;padding:8px 10px;border-radius:var(--rsm);border:1px solid var(--border);background:var(--bg4);color:var(--text);font-size:13px;outline:none">
+        <span style="color:var(--text3)">—</span>
+        <input type="date" id="sal-to" value="${today}" style="flex:1;min-width:120px;padding:8px 10px;border-radius:var(--rsm);border:1px solid var(--border);background:var(--bg4);color:var(--text);font-size:13px;outline:none">
+        <button class="btn btn-acc" style="width:auto;flex:none" onclick="renderSalaryCalc()">Применить</button>
+      </div>
+    </div>
+    <div id="sal-results"></div>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-analytics')">Закрыть</button>`;
+  openModal('m-analytics');
+  renderSalaryCalc();
+}
+function renderSalaryCalc(){
+  const from=g('sal-from')?.value||'';
+  const to=g('sal-to')?.value||'';
   const html=MASTERS.map(m=>{
-    const bks=BOOKINGS.filter(b=>b.masterId===m.id&&b.status==='done');
+    const bks=BOOKINGS.filter(b=>b.masterId===m.id&&b.status==='done'&&(!from||b.date>=from)&&(!to||b.date<=to));
     const total=bks.reduce((s,b)=>s+Number(b.price),0);
     return `<div style="background:var(--bg3);border-radius:var(--r);padding:16px;margin-bottom:10px">
       <div style="font-weight:700;margin-bottom:8px">${esc(m.name)}</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:8px">Завершено записей: ${bks.length} · Выручка: ${fm(total)}₸</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:8px">Завершено: ${bks.length} · Выручка: ${fm(total)}₸</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
         <span style="font-size:13px">Доля мастера:</span>
         <input type="number" value="40" min="0" max="100" id="sp-${m.id}" style="width:70px;padding:6px 10px;border-radius:var(--rsm);border:1px solid var(--border);background:var(--bg4);color:var(--text);font-size:14px;outline:none"> %
         <button class="btn btn-sm btn-acc" style="width:auto" onclick="calcSalary('${m.id}',${total})">Рассчитать</button>
       </div>
-      <div id="sp-res-${m.id}" style="margin-top:8px;font-family:var(--mono);font-size:14px;color:var(--teal)"></div>
+      <div id="sp-res-${m.id}" style="font-family:var(--mono);font-size:14px;color:var(--teal);margin-bottom:8px"></div>
+      <button class="btn btn-sm btn-out" style="width:auto;font-size:12px" onclick="viewSalaryBks('${m.id}','${from}','${to}')">📋 Записи за период</button>
+      <div id="sp-bks-${m.id}" style="margin-top:8px"></div>
     </div>`;
   }).join('');
-  g('analytics-body').innerHTML=html+`<button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-analytics')">Закрыть</button>`;
-  openModal('m-analytics');
+  g('sal-results').innerHTML=html||`<div class="empty"><div class="empty-ico">💵</div><div class="empty-txt">Мастеров нет</div></div>`;
 }
 function calcSalary(masterId,total){
   const pct=Number(g('sp-'+masterId)?.value)||40;
@@ -1403,6 +1506,15 @@ function calcSalary(masterId,total){
   const salonShare=total-masterShare;
   const el=g('sp-res-'+masterId);
   if(el)el.textContent=`Мастер: ${fm(masterShare)}₸ (${pct}%)  Салон: ${fm(salonShare)}₸ (${100-pct}%)`;
+}
+function viewSalaryBks(masterId,from,to){
+  const el=g('sp-bks-'+masterId);if(!el)return;
+  const bks=BOOKINGS.filter(b=>b.masterId===masterId&&b.status==='done'&&(!from||b.date>=from)&&(!to||b.date<=to));
+  if(!bks.length){el.innerHTML=`<div style="font-size:12px;color:var(--text3)">Нет записей</div>`;return;}
+  el.innerHTML=bks.map(b=>`<div style="border-top:1px solid var(--border);padding:8px 0;font-size:12px;display:flex;justify-content:space-between">
+    <div><div style="font-weight:600">${esc(b.clientName||b.clientPhone||'—')}</div><div style="color:var(--text3)">${fmDate(b.date)} ${b.time} · ${esc(b.serviceName)}</div></div>
+    <div style="font-family:var(--mono);color:var(--acc)">${fm(b.price)}₸</div>
+  </div>`).join('');
 }
 </script>
 </body>

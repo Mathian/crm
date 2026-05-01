@@ -750,8 +750,8 @@ function salonCard(s) {
   return `<div class="salon-card" onclick="openSalon('${s.id}')">
     <div class="salon-cover" style="${s.cover||'background:var(--bg4)'}">
       ${s.img ? `<img src="${s.img}" alt="">` : `<div class="salon-cover-ico">${s.icon||'✦'}</div>`}
+      <button onclick="toggleFav('${s.id}',event)" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.45);border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2">${fav?'❤️':'🤍'}</button>
       <div class="salon-badge ${open?'sb-open':'sb-closed'}">${open?'Открыто':'Закрыто'}</div>
-      <button onclick="toggleFav('${s.id}',event)" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.45);border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2">${fav?'❤️':'🤍'}</button>
     </div>
     <div class="salon-body">
       <div class="salon-name">${esc(s.name)}</div>
@@ -992,14 +992,19 @@ async function confirmBooking() {
   const btn = document.querySelector('#wiz-body .btn-acc');
   if (btn) { btn.disabled = true; btn.textContent = 'Проверяем...'; }
 
+  // ── Block check ───────────────────────────────────────────────────────────
+  const clientDocId = curSalonId + '_' + UID;
+  const clientDoc = await fbGet('salon_clients', clientDocId);
+  if (clientDoc?.blocked) {
+    showToast('Запись в этот салон недоступна','e');
+    if (btn) { btn.disabled = false; btn.textContent = 'Подтвердить запись'; }
+    return;
+  }
+
   // ── Conflict check (fresh data) ──────────────────────────────────────────
   const freshBks = await fbQuery('bookings',
     ['bizId','==',curSalonId], ['masterId','==',wiz.master?.id||'m0'], ['date','==',wiz.date]);
-  const conflict = freshBks.filter(b => b.status !== 'cancelled').some(b => {
-    const [bh,bm]=b.time.split(':').map(Number), bs=bh*60+bm, be=bs+(b.dur||60);
-    const [wh,wm]=wiz.time.split(':').map(Number), ws=wh*60+wm, we=ws+(wiz.service.dur||60);
-    return ws < be && we > bs;
-  });
+  const conflict = freshBks.filter(b => b.status !== 'cancelled').some(b => b.time === wiz.time);
   if (conflict) {
     showToast('Это время уже занято, выберите другое','e');
     if (btn) { btn.disabled = false; btn.textContent = 'Подтвердить запись'; }

@@ -167,7 +167,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       <button class="btn btn-acc" onclick="showTab('salons')">🏠 Управление салонами</button>
       <button class="btn btn-out" onclick="showTab('users')">👥 Пользователи</button>
       <button class="btn btn-out" onclick="showTab('cats')">🏷 Категории</button>
+      <button class="btn btn-rose" onclick="openCleanup()">🗑 Очистка старых записей</button>
     </div>
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px;padding-bottom:8px">Zap is... · by @mathian</div>
   </div>
   <div class="bnav">
     <button class="ni on" onclick="showTab('dash')"><div class="ni-bar"></div><span class="ni-ico">📊</span><span class="ni-lbl">Главная</span></button>
@@ -552,6 +554,77 @@ async function deleteCat(id){
     showToast('Категория удалена');renderCats();
   });
 }
+
+// ── CLEANUP ──
+function openCleanup(){
+  const cutoff=new Date();cutoff.setMonth(cutoff.getMonth()-3);
+  const defDate=cutoff.toISOString().slice(0,10);
+  g('cleanup-body').innerHTML=`
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px">
+      Удаляет завершённые и отменённые записи старше указанной даты.<br>
+      <strong>Статистика клиентов (кол-во визитов, сумма) сохраняется.</strong>
+    </div>
+    <div class="fld" style="margin-bottom:14px">
+      <label>Удалить записи до даты</label>
+      <input type="date" id="cu-before" value="${defDate}" style="width:100%;padding:10px 12px;border-radius:var(--rsm);border:1px solid var(--border);background:var(--bg4);color:var(--text);font-size:15px;outline:none">
+    </div>
+    <div id="cu-preview" style="margin-bottom:14px"></div>
+    <button class="btn btn-out" style="margin-bottom:8px" onclick="previewCleanup()">🔍 Предпросмотр</button>
+    <button class="btn btn-rose" id="cu-del-btn" style="display:none" onclick="runCleanup()">🗑 Удалить</button>
+    <button class="btn btn-ghost" style="margin-top:8px" onclick="closeModal('m-cleanup')">Отмена</button>`;
+  openModal('m-cleanup');
+}
+async function previewCleanup(){
+  const before=g('cu-before')?.value;if(!before)return;
+  const prev=g('cu-preview');prev.innerHTML=`<div class="spin-center"><div class="spinner"></div></div>`;
+  const allBks=await fbQuery('bookings');
+  const toDelete=allBks.filter(b=>(b.status==='done'||b.status==='cancelled')&&b.date<before);
+  prev.innerHTML=`<div style="background:var(--bg3);border-radius:var(--rsm);padding:14px;font-size:13px">
+    Будет удалено записей: <strong>${toDelete.length}</strong><br>
+    <span style="color:var(--text3);font-size:12px">Завершённых: ${toDelete.filter(b=>b.status==='done').length} · Отменённых: ${toDelete.filter(b=>b.status==='cancelled').length}</span>
+  </div>`;
+  const btn=g('cu-del-btn');if(btn)btn.style.display=toDelete.length?'':'none';
+}
+async function runCleanup(){
+  const before=g('cu-before')?.value;if(!before)return;
+  const btn=g('cu-del-btn');if(btn){btn.disabled=true;btn.textContent='Удаляем...';}
+  const allBks=await fbQuery('bookings');
+  const toDelete=allBks.filter(b=>(b.status==='done'||b.status==='cancelled')&&b.date<before);
+  // Aggregate stats per salon_client before deleting
+  const stats={};
+  toDelete.filter(b=>b.status==='done').forEach(b=>{
+    const key=b.bizId+'_'+(b.clientId||b.clientUid||'');
+    if(!stats[key])stats[key]={bizId:b.bizId,clientId:b.clientId||b.clientUid||'',visits:0,totalSpent:0};
+    stats[key].visits++;stats[key].totalSpent+=Number(b.price)||0;
+  });
+  // Preserve stats in salon_clients
+  for(const[key,s] of Object.entries(stats)){
+    if(!s.clientId)continue;
+    const docId=s.bizId+'_'+s.clientId;
+    const existing=await fbGet('salon_clients',docId);
+    if(existing){
+      await fbSet('salon_clients',docId,{
+        archivedVisits:(existing.archivedVisits||0)+s.visits,
+        archivedSpent:(existing.archivedSpent||0)+s.totalSpent
+      });
+    }
+  }
+  // Delete bookings in batches
+  let deleted=0;
+  for(const b of toDelete){await fbDelete('bookings',b.id);deleted++;}
+  closeModal('m-cleanup');
+  showToast(`Удалено ${deleted} записей · статистика сохранена`,'s');
+}
 </script>
+
+<!-- Cleanup modal -->
+<div class="modal-overlay" id="m-cleanup" onclick="if(event.target===this)closeModal('m-cleanup')">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title">Очистка старых записей</div>
+    <div id="cleanup-body"></div>
+  </div>
+</div>
+
 </body>
 </html>
