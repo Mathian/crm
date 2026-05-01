@@ -1157,11 +1157,31 @@ async function saveNewBooking(){
     createdAt:new Date().toISOString(),createdBy:'admin'};
   await fbSet('bookings',id,bk);
   BOOKINGS.push(bk);
-  // Уведомить клиента и мастера
+
+  // ── Добавить / обновить клиента в salon_clients ──────────────────────────
+  const cli=nbData.client;
+  const cliDocId=BIZ.id+'_'+cli.id;
+  const existIdx=CLIENTS.findIndex(c=>c.id===cli.id||c.id===cliDocId);
+  if(existIdx<0){
+    // Клиент новый — добавляем в базу и локальный массив
+    const cliRec={id:cliDocId,bizId:BIZ.id,clientId:cli.id,uid:cli.uid||'',
+      name:cli.name,phone:cli.phone||'',alias:'',blocked:false,
+      visits:1,totalSpent:Number(bk.price)||0,color:CLIENTS.length%6,
+      createdAt:new Date().toISOString(),createdBy:'admin'};
+    CLIENTS.push(cliRec);
+    await fbSet('salon_clients',cliDocId,cliRec);
+  } else {
+    // Клиент уже есть — увеличиваем счётчик (только подтверждённые)
+    CLIENTS[existIdx].visits=(CLIENTS[existIdx].visits||0)+1;
+    await fbSet('salon_clients',CLIENTS[existIdx].id,{visits:CLIENTS[existIdx].visits});
+  }
+
+  // ── Уведомить клиента и мастера ──────────────────────────────────────────
   if(bk.clientUid)await writeNotif(bk.clientUid,'client',
     `📅 Вас записали: ${esc(bk.serviceName)} · ${fmDate(bk.date)} ${bk.time} к ${esc(bk.masterName)} в ${esc(BIZ.name)}`,'new_booking',id);
   if(bk.masterUid&&bk.masterUid!==UID)await writeNotif(bk.masterUid,'master',
     `📋 Новая запись: ${esc(bk.clientName)}, ${esc(bk.serviceName)} · ${fmDate(bk.date)} ${bk.time}`,'new_booking',id);
+
   closeModal('m-new-booking');
   showToast('Запись создана','s');
   tg.HapticFeedback.impactOccurred('heavy');
@@ -1322,13 +1342,27 @@ async function inviteMaster(){
   const spec=(g('am-spec')?.value||'').trim();
   if(!phone||!name){showToast('Заполните обязательные поля','e');return;}
   const inviteId='inv_'+Date.now();
+  const masterId='m_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  const open=g('am-open')?.value||'09:00';
+  const close=g('am-close')?.value||'19:00';
+  const slotInterval=Number(g('am-interval')?.value||60);
+  const workDays=getMasterWorkDays();
+
+  // 1. Create bot invite so master gets notified
   const invite={id:inviteId,bizId:BIZ.id,salonName:BIZ.name,salonId:BIZ.id,
-    phone,name,spec,open:g('am-open')?.value||'09:00',close:g('am-close')?.value||'19:00',
-    workDays:getMasterWorkDays(),slotInterval:Number(g('am-interval')?.value||60),
-    status:'pending',createdAt:new Date().toISOString()};
+    phone,name,spec,open,close,workDays,slotInterval,
+    masterId,status:'pending',createdAt:new Date().toISOString()};
   await fbSet('master_invites',inviteId,invite);
+
+  // 2. Add master directly to salon_masters so list updates immediately
+  const newMaster={id:masterId,bizId:BIZ.id,phone,name,spec,open,close,workDays,slotInterval,
+    uid:'',color:MASTERS.length%6,createdAt:new Date().toISOString()};
+  MASTERS.push(newMaster);
+  await fbSet('salon_masters',BIZ.id,{masters:MASTERS});
+
   closeModal('m-add-master');
-  showToast('Приглашение отправлено. Мастер увидит его в боте.','s');
+  showToast('Мастер добавлен! Приглашение отправлено в бот.','s');
+  renderMasterList();
 }
 async function removeMaster(id){
   tg.showConfirm('Удалить мастера из салона?',async yes=>{

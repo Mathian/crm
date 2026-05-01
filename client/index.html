@@ -477,10 +477,11 @@ const ls = {
 
 // ── FIREBASE ──
 let FB = null;
-window.addEventListener('fbReady', async () => {
+let _authReady = Promise.resolve(); // resolves when anonymous auth completes (or fails)
+window.addEventListener('fbReady', () => {
   if (window._fbReady && window._FB) {
     FB = window._FB;
-    try { await FB.signInAnonymously(FB.auth); } catch {}
+    _authReady = FB.signInAnonymously(FB.auth).catch(() => {});
   }
 }, { once: true });
 
@@ -597,20 +598,31 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function boot() {
-  if (!UID) { showScreen('s-nouid'); return; }
+  try {
+    if (!UID) { showScreen('s-nouid'); return; }
 
-  LINK = await fbGet('user_links', UID);
-  USER = await fbGet('users', UID);
+    // Wait for anonymous auth to complete before any Firestore calls
+    await _authReady;
 
-  if (!USER) { showOnboard(); return; }
+    LINK = await fbGet('user_links', UID);
+    USER = await fbGet('users', UID);
 
-  g('cli-av').textContent = avLetter(USER.firstName || USER.name);
-  await loadFavs();
-  await loadCatalog();
-  renderCatalog();
-  showScreen('s-catalog');
-  startHeartbeat();
-  startMyBkSync();
+    if (!USER) { showOnboard(); return; }
+
+    const avEl = g('cli-av');
+    if (avEl) avEl.textContent = avLetter(USER.firstName || USER.name);
+    await loadFavs();
+    await loadCatalog();
+    renderCatalog();
+    showScreen('s-catalog');
+    startHeartbeat();
+    startMyBkSync();
+  } catch(e) {
+    console.error('[boot]', e);
+    // Fallback: show catalog even if something failed mid-boot
+    try { renderCatalog(); } catch {}
+    showScreen('s-catalog');
+  }
 }
 
 // ── HEARTBEAT ──
