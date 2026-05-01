@@ -477,33 +477,41 @@ const ls = {
 
 // ── FIREBASE ──
 let FB = null;
-// Await auth before boot() runs — ensures Firestore reads succeed from the start.
+
+// Race any promise against a ms-millisecond timeout that resolves to fallback.
+function timed(p, ms, fallback = null) {
+  return Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
+}
+
+// Start auth when Firebase is ready; cap at 4 s so it never blocks Firestore.
 window.addEventListener('fbReady', async () => {
   if (window._fbReady && window._FB) {
     FB = window._FB;
-    try { await FB.signInAnonymously(FB.auth); } catch {}
+    try { await timed(FB.signInAnonymously(FB.auth), 4000); } catch {}
   }
 }, { once: true });
 
 async function fbGet(col, id) {
   if (!FB) return ls.get(col+'_'+id);
-  try { const d = await FB.getDoc(FB.doc(FB.db,col,id)); return d.exists() ? d.data() : null; }
-  catch { return null; }
+  try {
+    const d = await timed(FB.getDoc(FB.doc(FB.db,col,id)), 7000);
+    return d?.exists?.() ? d.data() : null;
+  } catch { return null; }
 }
 async function fbSet(col, id, data) {
   ls.set(col+'_'+id, data);
   if (!FB) return;
-  try { await FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}); } catch(e) { console.warn(e); }
+  try { await timed(FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}), 7000); } catch {}
 }
 async function fbQuery(col, ...conditions) {
   if (!FB) return [];
   try {
     let q = FB.collection(FB.db, col);
-    const constraints = conditions.map(([f,op,v]) => FB.where(f,op,v));
-    q = FB.query(q, ...constraints);
-    const snap = await FB.getDocs(q);
+    q = FB.query(q, ...conditions.map(([f,op,v]) => FB.where(f,op,v)));
+    const snap = await timed(FB.getDocs(q), 7000);
+    if (!snap) return [];
     return snap.docs.map(d => ({id: d.id, ...d.data()}));
-  } catch(e) { console.warn(e); return []; }
+  } catch { return []; }
 }
 
 // ── TELEGRAM ──
