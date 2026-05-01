@@ -477,27 +477,28 @@ const ls = {
 
 // ── FIREBASE ──
 let FB = null;
-// Resolves when anonymous auth is done (or times out after 5s)
-let _authReady = Promise.resolve();
+// Start anonymous auth as soon as Firebase is ready (no explicit await needed in boot)
 window.addEventListener('fbReady', () => {
   if (window._fbReady && window._FB) {
     FB = window._FB;
-    _authReady = Promise.race([
-      FB.signInAnonymously(FB.auth),
-      new Promise(r => setTimeout(r, 5000)) // 5s max
-    ]).catch(() => {});
+    FB.signInAnonymously(FB.auth).catch(() => {});
   }
 }, { once: true });
 
+// Wraps any promise with a timeout; resolves to `fallback` if time runs out.
+function withTimeout(p, ms, fallback = null) {
+  return Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
+}
+
 async function fbGet(col, id) {
   if (!FB) return ls.get(col+'_'+id);
-  try { const d = await FB.getDoc(FB.doc(FB.db,col,id)); return d.exists() ? d.data() : null; }
+  try { const d = await withTimeout(FB.getDoc(FB.doc(FB.db,col,id)), 6000); return d?.exists?.() ? d.data() : null; }
   catch { return null; }
 }
 async function fbSet(col, id, data) {
   ls.set(col+'_'+id, data);
   if (!FB) return;
-  try { await FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}); } catch(e) { console.warn(e); }
+  try { await withTimeout(FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}), 6000); } catch(e) { console.warn(e); }
 }
 async function fbQuery(col, ...conditions) {
   if (!FB) return [];
@@ -505,7 +506,8 @@ async function fbQuery(col, ...conditions) {
     let q = FB.collection(FB.db, col);
     const constraints = conditions.map(([f,op,v]) => FB.where(f,op,v));
     q = FB.query(q, ...constraints);
-    const snap = await FB.getDocs(q);
+    const snap = await withTimeout(FB.getDocs(q), 6000);
+    if (!snap) return [];
     return snap.docs.map(d => ({id: d.id, ...d.data()}));
   } catch(e) { console.warn(e); return []; }
 }
@@ -614,31 +616,45 @@ window.addEventListener('DOMContentLoaded', async () => {
   setTimeout(boot, Math.max(0, 2300 - elapsed));
 });
 
-// Absolute safety net: if splash is still showing after 9 s, force boot.
-// Covers any edge case the above guards miss.
+// Safety net: if splash is still showing after 10 s, force-show catalog.
+// Handles the case where boot() never resolves (DOMContentLoaded threw, etc.)
+// NOTE: does NOT call boot() — _booting guard would block it anyway.
 setTimeout(() => {
   if (g('s-splash')?.classList.contains('active')) {
-    console.warn('[safety-net] forcing boot after timeout');
-    boot();
+    console.warn('[safety-net] forcing screen after 10 s');
+    try { renderCatalog(); } catch {}
+    showScreen(UID ? 's-catalog' : 's-nouid');
   }
-}, 9000);
+}, 10000);
 
 let _booting = false;
 async function boot() {
-  if (_booting) return; // prevent double-boot from safety-net
+  if (_booting) return;
   _booting = true;
-  try {
-    if (!UID) { showScreen('s-nouid'); return; }
 
-    // Wait for anonymous auth (already racing against 5 s timeout)
-    await _authReady;
+  // Hard deadline: no matter what async ops hang, we show a screen within 8 s of boot().
+  let _deadlineFired = false;
+  const _deadline = setTimeout(() => {
+    _deadlineFired = true;
+    console.warn('[boot] deadline hit — forcing screen');
+    try { renderCatalog(); } catch {}
+    showScreen(UID ? 's-catalog' : 's-nouid');
+  }, 8000);
+
+  try {
+    if (!UID) { clearTimeout(_deadline); showScreen('s-nouid'); return; }
+
+    // Give anonymous auth a brief head-start (it started at fbReady time, ~2 s ago).
+    // 800 ms is enough if Firebase CDN responded normally; we skip if already resolved.
+    await new Promise(r => setTimeout(r, 800));
+    if (_deadlineFired) return;
 
     LINK = await fbGet('user_links', UID);
     USER = await fbGet('users', UID);
 
-    // Fallback for users registered via bot before the users/{uid} write was added:
-    // if LINK exists (bot already registered them) but users doc is missing, auto-create it
-    // so they go straight to the catalog without seeing the onboard flow again.
+    if (_deadlineFired) return;
+
+    // Fallback: bot registered user (LINK exists) but users doc missing → auto-create
     if (!USER && LINK) {
       USER = {
         uid:       UID,
@@ -650,22 +666,25 @@ async function boot() {
         role:      'client',
         createdAt: new Date().toISOString()
       };
-      try { await fbSet('users', UID, USER); } catch(e) { console.warn('[boot] users auto-create failed', e); }
+      fbSet('users', UID, USER); // fire-and-forget; withTimeout inside fbSet
     }
 
-    if (!USER) { showOnboard(); return; }
+    if (!USER) { clearTimeout(_deadline); showOnboard(); return; }
 
     const avEl = g('cli-av');
     if (avEl) avEl.textContent = avLetter(USER.firstName || USER.name);
-    await loadFavs();
-    await loadCatalog();
+
+    await Promise.all([loadFavs(), loadCatalog()]);
+    if (_deadlineFired) return;
+
+    clearTimeout(_deadline);
     renderCatalog();
     showScreen('s-catalog');
     startHeartbeat();
     startMyBkSync();
   } catch(e) {
+    clearTimeout(_deadline);
     console.error('[boot]', e);
-    // Fallback — show catalog regardless
     try { renderCatalog(); } catch {}
     showScreen('s-catalog');
   }
