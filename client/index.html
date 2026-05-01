@@ -477,28 +477,23 @@ const ls = {
 
 // ── FIREBASE ──
 let FB = null;
-// Start anonymous auth as soon as Firebase is ready (no explicit await needed in boot)
-window.addEventListener('fbReady', () => {
+// Await auth before boot() runs — ensures Firestore reads succeed from the start.
+window.addEventListener('fbReady', async () => {
   if (window._fbReady && window._FB) {
     FB = window._FB;
-    FB.signInAnonymously(FB.auth).catch(() => {});
+    try { await FB.signInAnonymously(FB.auth); } catch {}
   }
 }, { once: true });
 
-// Wraps any promise with a timeout; resolves to `fallback` if time runs out.
-function withTimeout(p, ms, fallback = null) {
-  return Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
-}
-
 async function fbGet(col, id) {
   if (!FB) return ls.get(col+'_'+id);
-  try { const d = await withTimeout(FB.getDoc(FB.doc(FB.db,col,id)), 6000); return d?.exists?.() ? d.data() : null; }
+  try { const d = await FB.getDoc(FB.doc(FB.db,col,id)); return d.exists() ? d.data() : null; }
   catch { return null; }
 }
 async function fbSet(col, id, data) {
   ls.set(col+'_'+id, data);
   if (!FB) return;
-  try { await withTimeout(FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}), 6000); } catch(e) { console.warn(e); }
+  try { await FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}); } catch(e) { console.warn(e); }
 }
 async function fbQuery(col, ...conditions) {
   if (!FB) return [];
@@ -506,8 +501,7 @@ async function fbQuery(col, ...conditions) {
     let q = FB.collection(FB.db, col);
     const constraints = conditions.map(([f,op,v]) => FB.where(f,op,v));
     q = FB.query(q, ...constraints);
-    const snap = await withTimeout(FB.getDocs(q), 6000);
-    if (!snap) return [];
+    const snap = await FB.getDocs(q);
     return snap.docs.map(d => ({id: d.id, ...d.data()}));
   } catch(e) { console.warn(e); return []; }
 }
@@ -581,113 +575,61 @@ function showToast(msg, type='') {
 
 // ── BOOT ──
 window.addEventListener('DOMContentLoaded', async () => {
-  const _t0 = performance.now();
-
-  // Wait for Firebase module to init — max 5 s.
-  // If the module fails to load (CDN blocked, network error, Telegram WebView
-  // restriction), fbReady never fires and _fbReady is never set → we'd hang
-  // forever without this timeout.
+  // Wait for Firebase module — if fbReady already fired (module runs before DOMContentLoaded)
+  // resolve immediately; otherwise wait up to 5 s before continuing without Firebase.
   await new Promise(r => {
-    if (window._fbReady !== undefined) { r(); return; }
-    const guard = setTimeout(() => {
-      window._fbReady = false; // mark as unavailable
-      r();
-    }, 5000);
+    if (window._fbReady !== undefined) return r();
+    const guard = setTimeout(() => { window._fbReady = false; r(); }, 5000);
     window.addEventListener('fbReady', () => { clearTimeout(guard); r(); }, { once: true });
   });
 
   const sp = new URLSearchParams(location.search);
   if (sp.get('reset') === '1') {
     ['uid','user','link'].forEach(k => ls.del(k));
-    history.replaceState(null, '', location.pathname);
+    try { history.replaceState(null, '', location.pathname); } catch {}
   }
 
   const urlUid = sp.get('uid');
   if (urlUid && urlUid.length === 64) {
     UID = urlUid; ls.set('uid', urlUid);
-    history.replaceState(null, '', location.pathname);
+    try { history.replaceState(null, '', location.pathname); } catch {}
   } else {
     UID = ls.get('uid');
   }
 
-  // Splash animation is 2.3 s. Schedule boot so it runs no earlier than 2.3 s
-  // from page load, but no later than 2.3 s after Firebase is ready.
-  const elapsed = performance.now() - _t0;
-  setTimeout(boot, Math.max(0, 2300 - elapsed));
+  setTimeout(boot, 2200);
 });
 
-// Safety net: if splash is still showing after 10 s, force-show catalog.
-// Handles the case where boot() never resolves (DOMContentLoaded threw, etc.)
-// NOTE: does NOT call boot() — _booting guard would block it anyway.
-setTimeout(() => {
-  if (g('s-splash')?.classList.contains('active')) {
-    console.warn('[safety-net] forcing screen after 10 s');
-    try { renderCatalog(); } catch {}
-    showScreen(UID ? 's-catalog' : 's-nouid');
-  }
-}, 10000);
-
-let _booting = false;
 async function boot() {
-  if (_booting) return;
-  _booting = true;
+  if (!UID) { showScreen('s-nouid'); return; }
 
-  // Hard deadline: no matter what async ops hang, we show a screen within 8 s of boot().
-  let _deadlineFired = false;
-  const _deadline = setTimeout(() => {
-    _deadlineFired = true;
-    console.warn('[boot] deadline hit — forcing screen');
-    try { renderCatalog(); } catch {}
-    showScreen(UID ? 's-catalog' : 's-nouid');
-  }, 8000);
+  LINK = await fbGet('user_links', UID);
+  USER = await fbGet('users', UID);
 
-  try {
-    if (!UID) { clearTimeout(_deadline); showScreen('s-nouid'); return; }
-
-    // Give anonymous auth a brief head-start (it started at fbReady time, ~2 s ago).
-    // 800 ms is enough if Firebase CDN responded normally; we skip if already resolved.
-    await new Promise(r => setTimeout(r, 800));
-    if (_deadlineFired) return;
-
-    LINK = await fbGet('user_links', UID);
-    USER = await fbGet('users', UID);
-
-    if (_deadlineFired) return;
-
-    // Fallback: bot registered user (LINK exists) but users doc missing → auto-create
-    if (!USER && LINK) {
-      USER = {
-        uid:       UID,
-        phone:     LINK.phone     || '',
-        firstName: LINK.firstName || '',
-        lastName:  LINK.username  || '',
-        name:      LINK.firstName || '',
-        tgId:      LINK.tgId      || '',
-        role:      'client',
-        createdAt: new Date().toISOString()
-      };
-      fbSet('users', UID, USER); // fire-and-forget; withTimeout inside fbSet
-    }
-
-    if (!USER) { clearTimeout(_deadline); showOnboard(); return; }
-
-    const avEl = g('cli-av');
-    if (avEl) avEl.textContent = avLetter(USER.firstName || USER.name);
-
-    await Promise.all([loadFavs(), loadCatalog()]);
-    if (_deadlineFired) return;
-
-    clearTimeout(_deadline);
-    renderCatalog();
-    showScreen('s-catalog');
-    startHeartbeat();
-    startMyBkSync();
-  } catch(e) {
-    clearTimeout(_deadline);
-    console.error('[boot]', e);
-    try { renderCatalog(); } catch {}
-    showScreen('s-catalog');
+  // Fallback: bot registered user but users/{uid} doc was missing (legacy accounts).
+  if (!USER && LINK) {
+    USER = {
+      uid:       UID,
+      phone:     LINK.phone     || '',
+      firstName: LINK.firstName || '',
+      lastName:  LINK.username  || '',
+      name:      LINK.firstName || '',
+      tgId:      LINK.tgId      || '',
+      role:      'client',
+      createdAt: new Date().toISOString()
+    };
+    fbSet('users', UID, USER);
   }
+
+  if (!USER) { showOnboard(); return; }
+
+  g('cli-av').textContent = avLetter(USER.firstName || USER.name);
+  await loadFavs();
+  await loadCatalog();
+  renderCatalog();
+  showScreen('s-catalog');
+  startHeartbeat();
+  startMyBkSync();
 }
 
 // ── HEARTBEAT ──
