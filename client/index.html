@@ -493,10 +493,19 @@ window.addEventListener('fbReady', async () => {
 
 async function fbGet(col, id) {
   if (!FB) return ls.get(col+'_'+id);
+
   try {
-    const d = await timed(FB.getDoc(FB.doc(FB.db,col,id)), 7000);
-    return d?.exists?.() ? d.data() : null;
-  } catch { return null; }
+    const d = await timed(FB.getDoc(FB.doc(FB.db, col, id)), 6000);
+    if (d?.exists?.()) {
+      const data = d.data();
+      ls.set(col+'_'+id, data); // кэшируем
+      return data;
+    }
+    return null;
+  } catch (e) {
+    console.warn(`fbGet ${col}/${id} failed`, e);
+    return ls.get(col+'_'+id);
+  }
 }
 async function fbSet(col, id, data) {
   ls.set(col+'_'+id, data);
@@ -583,61 +592,81 @@ function showToast(msg, type='') {
 
 // ── BOOT ──
 window.addEventListener('DOMContentLoaded', async () => {
-  // Wait for Firebase module — if fbReady already fired (module runs before DOMContentLoaded)
-  // resolve immediately; otherwise wait up to 5 s before continuing without Firebase.
+  // Ждём Firebase
   await new Promise(r => {
     if (window._fbReady !== undefined) return r();
-    const guard = setTimeout(() => { window._fbReady = false; r(); }, 5000);
+    const guard = setTimeout(() => { window._fbReady = false; r(); }, 4500);
     window.addEventListener('fbReady', () => { clearTimeout(guard); r(); }, { once: true });
   });
 
   const sp = new URLSearchParams(location.search);
-  if (sp.get('reset') === '1') {
-    ['uid','user','link'].forEach(k => ls.del(k));
-    try { history.replaceState(null, '', location.pathname); } catch {}
-  }
+  let UID = sp.get('uid');
 
-  const urlUid = sp.get('uid');
-  if (urlUid && urlUid.length === 64) {
-    UID = urlUid; ls.set('uid', urlUid);
+  if (UID && UID.length >= 32) {
+    ls.set('uid', UID);
     try { history.replaceState(null, '', location.pathname); } catch {}
   } else {
     UID = ls.get('uid');
   }
 
-  setTimeout(boot, 2200);
-});
-
-async function boot() {
-  if (!UID) { showScreen('s-nouid'); return; }
-
-  LINK = await fbGet('user_links', UID);
-  USER = await fbGet('users', UID);
-
-  // Fallback: bot registered user but users/{uid} doc was missing (legacy accounts).
-  if (!USER && LINK) {
-    USER = {
-      uid:       UID,
-      phone:     LINK.phone     || '',
-      firstName: LINK.firstName || '',
-      lastName:  LINK.username  || '',
-      name:      LINK.firstName || '',
-      tgId:      LINK.tgId      || '',
-      role:      'client',
-      createdAt: new Date().toISOString()
-    };
-    fbSet('users', UID, USER);
+  if (!UID) {
+    showScreen('s-nouid');
+    return;
   }
 
-  if (!USER) { showOnboard(); return; }
+  // Запуск с защитой
+  boot(UID).catch(err => {
+    console.error("[Zap] Boot failed:", err);
+    showToast("Ошибка подключения к серверу. Обновите страницу.", "e");
+  });
+});
 
-  g('cli-av').textContent = avLetter(USER.firstName || USER.name);
-  await loadFavs();
-  await loadCatalog();
-  renderCatalog();
-  showScreen('s-catalog');
-  startHeartbeat();
-  startMyBkSync();
+async function boot(uid) {
+  try {
+    // Параллельно — быстрее и надёжнее
+    const [linkData, userData] = await Promise.allSettled([
+      fbGet('user_links', uid),
+      fbGet('users', uid)
+    ]);
+
+    LINK = linkData.status === 'fulfilled' ? linkData.value : null;
+    USER = userData.status === 'fulfilled' ? userData.value : null;
+
+    // Fallback — создаём пользователя, если его нет
+    if (!USER && LINK) {
+      USER = {
+        uid: uid,
+        phone: LINK.phone || '',
+        firstName: LINK.firstName || '',
+        lastName: LINK.username || '',
+        name: (LINK.firstName || '') + ' ' + (LINK.username || ''),
+        tgId: LINK.tgId || '',
+        role: 'client',
+        createdAt: new Date().toISOString()
+      };
+      await fbSet('users', uid, USER);
+    }
+
+    if (!USER) {
+      showOnboard();
+      return;
+    }
+
+    g('cli-av').textContent = avLetter(USER.firstName || USER.name || 'К');
+
+    await Promise.allSettled([loadFavs(), loadCatalog()]);
+
+    renderCatalog();
+    showScreen('s-catalog');
+    startHeartbeat();
+    startMyBkSync();
+
+    console.log("%cZap Client успешно запущен", "color:#2dd4bf;font-weight:bold", { uid: uid.slice(0,12)+'...' });
+
+  } catch (e) {
+    console.error(e);
+    showToast("Не удалось загрузить данные. Попробуйте ещё раз.", "e");
+  }
 }
 
 // ── HEARTBEAT ──
