@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Zap is...</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -483,41 +486,32 @@ function timed(p, ms, fallback = null) {
   return Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
 }
 
-// Start auth when Firebase is ready; cap at 4 s so it never blocks Firestore.
+// Start auth when Firebase is ready; cap at 3 s so Firestore reads aren't blocked.
 window.addEventListener('fbReady', async () => {
   if (window._fbReady && window._FB) {
     FB = window._FB;
-    try { await timed(FB.signInAnonymously(FB.auth), 4000); } catch {}
+    try { await timed(FB.signInAnonymously(FB.auth), 3000); } catch {}
   }
 }, { once: true });
 
 async function fbGet(col, id) {
   if (!FB) return ls.get(col+'_'+id);
-
   try {
-    const d = await timed(FB.getDoc(FB.doc(FB.db, col, id)), 6000);
-    if (d?.exists?.()) {
-      const data = d.data();
-      ls.set(col+'_'+id, data); // кэшируем
-      return data;
-    }
-    return null;
-  } catch (e) {
-    console.warn(`fbGet ${col}/${id} failed`, e);
-    return ls.get(col+'_'+id);
-  }
+    const d = await timed(FB.getDoc(FB.doc(FB.db,col,id)), 3000);
+    return d?.exists?.() ? d.data() : null;
+  } catch { return null; }
 }
 async function fbSet(col, id, data) {
   ls.set(col+'_'+id, data);
   if (!FB) return;
-  try { await timed(FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}), 7000); } catch {}
+  try { await timed(FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}), 3000); } catch {}
 }
 async function fbQuery(col, ...conditions) {
   if (!FB) return [];
   try {
     let q = FB.collection(FB.db, col);
     q = FB.query(q, ...conditions.map(([f,op,v]) => FB.where(f,op,v)));
-    const snap = await timed(FB.getDocs(q), 7000);
+    const snap = await timed(FB.getDocs(q), 3000);
     if (!snap) return [];
     return snap.docs.map(d => ({id: d.id, ...d.data()}));
   } catch { return []; }
@@ -592,80 +586,76 @@ function showToast(msg, type='') {
 
 // ── BOOT ──
 window.addEventListener('DOMContentLoaded', async () => {
-  // Ждём Firebase
+  // Wait for Firebase module — if fbReady already fired (module runs before DOMContentLoaded)
+  // resolve immediately; otherwise wait up to 5 s before continuing without Firebase.
   await new Promise(r => {
     if (window._fbReady !== undefined) return r();
-    const guard = setTimeout(() => { window._fbReady = false; r(); }, 4500);
+    const guard = setTimeout(() => { window._fbReady = false; r(); }, 5000);
     window.addEventListener('fbReady', () => { clearTimeout(guard); r(); }, { once: true });
   });
 
   const sp = new URLSearchParams(location.search);
-  let UID = sp.get('uid');
+  if (sp.get('reset') === '1') {
+    ['uid','user','link'].forEach(k => ls.del(k));
+    try { history.replaceState(null, '', location.pathname); } catch {}
+  }
 
-  if (UID && UID.length >= 32) {
-    ls.set('uid', UID);
+  const urlUid = sp.get('uid');
+  if (urlUid && urlUid.length === 64) {
+    UID = urlUid; ls.set('uid', urlUid);
     try { history.replaceState(null, '', location.pathname); } catch {}
   } else {
     UID = ls.get('uid');
   }
 
-  if (!UID) {
-    showScreen('s-nouid');
-    return;
-  }
-
-  // Запуск с защитой
-  boot(UID).catch(err => {
-    console.error("[Zap] Boot failed:", err);
-    showToast("Ошибка подключения к серверу. Обновите страницу.", "e");
-  });
+  setTimeout(boot, 2200);
 });
 
-async function boot(uid) {
+// ── Top-level safety net ──────────────────────────────────────────────────────
+// If something prevents boot() from ever calling showScreen (DOMContentLoaded
+// error, unhandled throw, etc.) force a screen after 8 s from page load.
+setTimeout(function safetNet() {
+  if (g('s-splash') && g('s-splash').classList.contains('active')) {
+    try { renderCatalog(); } catch(e) {}
+    showScreen(UID ? 's-catalog' : 's-nouid');
+  }
+}, 8000);
+
+async function boot() {
   try {
-    // Параллельно — быстрее и надёжнее
-    const [linkData, userData] = await Promise.allSettled([
-      fbGet('user_links', uid),
-      fbGet('users', uid)
-    ]);
+    if (!UID) { showScreen('s-nouid'); return; }
 
-    LINK = linkData.status === 'fulfilled' ? linkData.value : null;
-    USER = userData.status === 'fulfilled' ? userData.value : null;
+    LINK = await fbGet('user_links', UID);
+    USER = await fbGet('users', UID);
 
-    // Fallback — создаём пользователя, если его нет
+    // Fallback: bot registered user but users/{uid} doc was missing (legacy accounts).
     if (!USER && LINK) {
       USER = {
-        uid: uid,
-        phone: LINK.phone || '',
+        uid:       UID,
+        phone:     LINK.phone     || '',
         firstName: LINK.firstName || '',
-        lastName: LINK.username || '',
-        name: (LINK.firstName || '') + ' ' + (LINK.username || ''),
-        tgId: LINK.tgId || '',
-        role: 'client',
+        lastName:  LINK.username  || '',
+        name:      LINK.firstName || '',
+        tgId:      LINK.tgId      || '',
+        role:      'client',
         createdAt: new Date().toISOString()
       };
-      await fbSet('users', uid, USER);
+      fbSet('users', UID, USER);
     }
 
-    if (!USER) {
-      showOnboard();
-      return;
-    }
+    if (!USER) { showOnboard(); return; }
 
-    g('cli-av').textContent = avLetter(USER.firstName || USER.name || 'К');
-
-    await Promise.allSettled([loadFavs(), loadCatalog()]);
-
+    g('cli-av').textContent = avLetter(USER.firstName || USER.name);
+    await loadFavs();
+    await loadCatalog();
     renderCatalog();
     showScreen('s-catalog');
     startHeartbeat();
     startMyBkSync();
-
-    console.log("%cZap Client успешно запущен", "color:#2dd4bf;font-weight:bold", { uid: uid.slice(0,12)+'...' });
-
-  } catch (e) {
-    console.error(e);
-    showToast("Не удалось загрузить данные. Попробуйте ещё раз.", "e");
+  } catch(e) {
+    // Never leave user on splash — show catalog (possibly empty) on any error.
+    try { renderCatalog(); } catch(e2) {}
+    showScreen(UID ? 's-catalog' : 's-nouid');
   }
 }
 
