@@ -3,35 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <title>Zap is...</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, orderBy }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-const cfg = {
-  apiKey:"AIzaSyD6wnCYIGciW_VRujcxlis7HEgGfWC6vOA",
-  authDomain:"telegram-crm-85b05.firebaseapp.com",
-  projectId:"telegram-crm-85b05",
-  storageBucket:"telegram-crm-85b05.firebasestorage.app",
-  messagingSenderId:"499866542692",
-  appId:"1:499866542692:web:88eafe1e886c50bff03571",
-  measurementId:"G-613KEDVY7V"
-};
-try {
-  const app = initializeApp(cfg);
-  const db = getFirestore(app);
-  const auth = getAuth(app);
-  window._FB = { db, auth, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, orderBy, signInAnonymously };
-  window._fbReady = true;
-} catch(e) { window._fbReady = false; }
-window.dispatchEvent(new Event('fbReady'));
-</script>
 <style>
 :root{
   --bg:#0e0e12;--bg2:#141418;--bg3:#1a1a20;--bg4:#22222a;
@@ -464,171 +438,281 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <div class="toast" id="toast"></div>
 
 <script>
-// ── CONSTANTS ──
-const WD = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
-const CAT_ICONS = {hair:'✂️',nails:'💅',brows:'👁️',skin:'🌿',barber:'🪒',massage:'💆',other:'⭐'};
-const STATUS_L = {pending:'Ожидает',confirmed:'Подтверждено',done:'Завершено',cancelled:'Отменено'};
-const STATUS_C = {pending:'bd-wait',confirmed:'bd-conf',done:'bd-done',cancelled:'bd-canc'};
-const AV_COLS = ['#2dd4bf','#c084fc','#fb7185','#fbbf24','#4ade80','#60a5fa'];
+// ── FIREBASE CONFIG ──
+var FB_PROJECT = 'telegram-crm-85b05';
+var FB_KEY     = 'AIzaSyD6wnCYIGciW_VRujcxlis7HEgGfWC6vOA';
+var FB_BASE    = 'https://firestore.googleapis.com/v1/projects/' + FB_PROJECT + '/databases/(default)/documents';
+var FB_AUTH_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + FB_KEY;
 
-// ── STORAGE ──
-const ls = {
-  get: k => { try { return JSON.parse(localStorage.getItem('zapcli_'+k)) } catch { return null } },
-  set: (k,v) => { try { localStorage.setItem('zapcli_'+k, JSON.stringify(v)) } catch {} },
-  del: k => localStorage.removeItem('zapcli_'+k)
-};
+// ── ANONYMOUS AUTH TOKEN ──
+// Obtained immediately on page load via REST API — no Firebase SDK, no module scripts.
+// By the time boot() runs (2.3 s), the token is ready.
+var _idToken = null;
+(function getAnonToken() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', FB_AUTH_URL, true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.timeout = 4000;
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      try { var d = JSON.parse(xhr.responseText); _idToken = d.idToken || null; } catch(e) {}
+    }
+  };
+  xhr.send('{"returnSecureToken":true}');
+})();
 
-// ── FIREBASE ──
-let FB = null;
-
-// Race any promise against a ms-millisecond timeout that resolves to fallback.
-function timed(p, ms, fallback = null) {
-  return Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
+// ── FIRESTORE VALUE SERIALISERS ──
+function toFsVal(v) {
+  if (v === null || v === undefined) return {nullValue: null};
+  if (typeof v === 'boolean')        return {booleanValue: v};
+  if (typeof v === 'number')         return Number.isInteger(v) ? {integerValue: String(v)} : {doubleValue: v};
+  if (typeof v === 'string')         return {stringValue: v};
+  if (Array.isArray(v)) {
+    return {arrayValue: {values: v.map(toFsVal)}};
+  }
+  if (typeof v === 'object') {
+    var fields = {};
+    Object.keys(v).forEach(function(k) { fields[k] = toFsVal(v[k]); });
+    return {mapValue: {fields: fields}};
+  }
+  return {stringValue: String(v)};
 }
 
-// Start auth when Firebase is ready; cap at 3 s so Firestore reads aren't blocked.
-window.addEventListener('fbReady', async () => {
-  if (window._fbReady && window._FB) {
-    FB = window._FB;
-    try { await timed(FB.signInAnonymously(FB.auth), 3000); } catch {}
+function fromFsVal(v) {
+  if (!v) return null;
+  if ('stringValue'    in v) return v.stringValue;
+  if ('integerValue'   in v) return parseInt(v.integerValue, 10);
+  if ('doubleValue'    in v) return v.doubleValue;
+  if ('booleanValue'   in v) return v.booleanValue;
+  if ('nullValue'      in v) return null;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('arrayValue' in v) {
+    return (v.arrayValue.values || []).map(fromFsVal);
   }
-}, { once: true });
+  if ('mapValue' in v) {
+    var o = {};
+    Object.keys(v.mapValue.fields || {}).forEach(function(k) {
+      o[k] = fromFsVal(v.mapValue.fields[k]);
+    });
+    return o;
+  }
+  return null;
+}
+
+function fromFsDoc(doc) {
+  if (!doc || !doc.fields) return null;
+  var o = {};
+  Object.keys(doc.fields).forEach(function(k) { o[k] = fromFsVal(doc.fields[k]); });
+  return o;
+}
+
+// ── FIREBASE REST HELPERS ──
+function authHeaders() {
+  var h = {'Content-Type': 'application/json'};
+  if (_idToken) h['Authorization'] = 'Bearer ' + _idToken;
+  return h;
+}
+
+function xhrFetch(method, url, body, timeoutMs) {
+  return new Promise(function(resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    xhr.timeout = timeoutMs || 5000;
+    var hdrs = authHeaders();
+    Object.keys(hdrs).forEach(function(k) { xhr.setRequestHeader(k, hdrs[k]); });
+    xhr.onload  = function() { resolve({ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, text: xhr.responseText}); };
+    xhr.onerror = function() { reject(new Error('network')); };
+    xhr.ontimeout = function() { reject(new Error('timeout')); };
+    xhr.send(body ? JSON.stringify(body) : null);
+  });
+}
 
 async function fbGet(col, id) {
-  if (!FB) return ls.get(col+'_'+id);
+  var cached = ls.get(col + '_' + id);
   try {
-    const d = await timed(FB.getDoc(FB.doc(FB.db,col,id)), 3000);
-    return d?.exists?.() ? d.data() : null;
-  } catch { return null; }
+    var res = await xhrFetch('GET', FB_BASE + '/' + col + '/' + id + '?key=' + FB_KEY, null, 5000);
+    if (!res.ok) return cached;
+    var data = JSON.parse(res.text);
+    var obj  = fromFsDoc(data);
+    if (obj) ls.set(col + '_' + id, obj);
+    return obj != null ? obj : cached;
+  } catch(e) {
+    return cached;
+  }
 }
+
 async function fbSet(col, id, data) {
-  ls.set(col+'_'+id, data);
-  if (!FB) return;
-  try { await timed(FB.setDoc(FB.doc(FB.db,col,id), data, {merge:true}), 3000); } catch {}
-}
-async function fbQuery(col, ...conditions) {
-  if (!FB) return [];
+  var prev = ls.get(col + '_' + id) || {};
+  var merged = Object.assign({}, prev, data);
+  ls.set(col + '_' + id, merged);
+
+  var fields = {};
+  Object.keys(data).forEach(function(k) { fields[k] = toFsVal(data[k]); });
+
+  var mask = Object.keys(data).map(function(k) {
+    return 'updateMask.fieldPaths=' + encodeURIComponent(k);
+  }).join('&');
+
   try {
-    let q = FB.collection(FB.db, col);
-    q = FB.query(q, ...conditions.map(([f,op,v]) => FB.where(f,op,v)));
-    const snap = await timed(FB.getDocs(q), 3000);
-    if (!snap) return [];
-    return snap.docs.map(d => ({id: d.id, ...d.data()}));
-  } catch { return []; }
+    await xhrFetch('PATCH', FB_BASE + '/' + col + '/' + id + '?key=' + FB_KEY + '&' + mask, {fields: fields}, 5000);
+  } catch(e) {}
 }
+
+var OP_MAP = {'==':'EQUAL','!=':'NOT_EQUAL','<':'LESS_THAN','<=':'LESS_THAN_OR_EQUAL','>':'GREATER_THAN','>=':'GREATER_THAN_OR_EQUAL'};
+
+async function fbQuery(col) {
+  var conditions = Array.prototype.slice.call(arguments, 1);
+  if (!conditions.length) return [];
+
+  var filters = conditions.map(function(c) {
+    return {
+      fieldFilter: {
+        field: {fieldPath: c[0]},
+        op:    OP_MAP[c[1]] || 'EQUAL',
+        value: toFsVal(c[2])
+      }
+    };
+  });
+
+  var where = filters.length === 1
+    ? filters[0]
+    : {compositeFilter: {op: 'AND', filters: filters}};
+
+  try {
+    var res = await xhrFetch('POST', FB_BASE + ':runQuery?key=' + FB_KEY,
+      {structuredQuery: {from: [{collectionId: col}], where: where}}, 5000);
+    if (!res.ok) return [];
+    var arr = JSON.parse(res.text);
+    return arr
+      .filter(function(item) { return item.document; })
+      .map(function(item) {
+        var docId = item.document.name.split('/').pop();
+        return Object.assign({id: docId}, fromFsDoc(item.document));
+      });
+  } catch(e) {
+    return [];
+  }
+}
+
+// ── LOCAL STORAGE ──
+var ls = {
+  get: function(k) { try { return JSON.parse(localStorage.getItem('zapcli_' + k)); } catch(e) { return null; } },
+  set: function(k, v) { try { localStorage.setItem('zapcli_' + k, JSON.stringify(v)); } catch(e) {} },
+  del: function(k) { localStorage.removeItem('zapcli_' + k); }
+};
+
+// ── CONSTANTS ──
+var WD = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+var CAT_ICONS = {hair:'✂️',nails:'💅',brows:'👁️',skin:'🌿',barber:'🪒',massage:'💆',other:'⭐'};
+var STATUS_L  = {pending:'Ожидает',confirmed:'Подтверждено',done:'Завершено',cancelled:'Отменено'};
+var STATUS_C  = {pending:'bd-wait',confirmed:'bd-conf',done:'bd-done',cancelled:'bd-canc'};
+var AV_COLS   = ['#2dd4bf','#c084fc','#fb7185','#fbbf24','#4ade80','#60a5fa'];
 
 // ── TELEGRAM ──
-const tg = window.Telegram?.WebApp || {
-  ready:()=>{}, expand:()=>{},
-  initDataUnsafe:{user:{id:1,first_name:'Тест',last_name:'Пользователь'}},
-  HapticFeedback:{impactOccurred:()=>{}},
-  showConfirm:(t,cb)=>cb(confirm(t))
+var tg = (window.Telegram && window.Telegram.WebApp) || {
+  ready: function(){}, expand: function(){},
+  initDataUnsafe: {user: {id: 1, first_name: 'Тест', last_name: 'Пользователь'}},
+  HapticFeedback: {impactOccurred: function(){}},
+  showConfirm: function(t, cb) { cb(confirm(t)); }
 };
-tg.ready(); tg.expand();
+tg.ready();
+tg.expand();
 
 // ── STATE ──
-let UID = null, USER = null, LINK = null;
-let ALL_SALONS = [], ALL_CATS = [];
-let FAVS = []; // array of salonId strings
-let curSalonId = null, curSalon = null, curServices = [], curMasters = [];
-let wizStep = 0;
-let wiz = { service: null, master: null, date: null, time: null };
-const WIZ_TITLES = ['Выберите услугу','Выберите мастера','Выберите дату','Выберите время','Подтверждение'];
+var UID = null, USER = null, LINK = null;
+var ALL_SALONS = [], ALL_CATS = [];
+var FAVS = [];
+var curSalonId = null, curSalon = null, curServices = [], curMasters = [];
+var wizStep = 0;
+var wiz = {service: null, master: null, date: null, time: null};
+var WIZ_TITLES = ['Выберите услугу','Выберите мастера','Выберите дату','Выберите время','Подтверждение'];
 
 // ── UTILS ──
-const g = id => document.getElementById(id);
-const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function g(id) { return document.getElementById(id); }
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function todayStr() { return dateStr(new Date()); }
 function dateStr(d) { return d.toISOString().split('T')[0]; }
 function fmDate(s) {
   if (!s) return '';
-  const d = new Date(s+'T00:00:00');
-  return d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
+  var d = new Date(s + 'T00:00:00');
+  return d.toLocaleDateString('ru-RU', {day:'numeric', month:'long'});
 }
-function fm(n) { return Number(n||0).toLocaleString('ru-RU'); }
-function avLetter(name) { return (name||'?')[0].toUpperCase(); }
+function fm(n) { return Number(n || 0).toLocaleString('ru-RU'); }
+function avLetter(name) { return ((name || '?')[0] || '?').toUpperCase(); }
 function isOpen(open, close) {
-  const now = new Date();
-  const [oh,om] = open.split(':').map(Number);
-  const [ch,cm] = close.split(':').map(Number);
-  const cur = now.getHours()*60+now.getMinutes();
-  return cur >= oh*60+om && cur < ch*60+cm;
+  var now = new Date();
+  var op = (open || '00:00').split(':').map(Number);
+  var cl = (close || '23:59').split(':').map(Number);
+  var cur = now.getHours() * 60 + now.getMinutes();
+  return cur >= op[0] * 60 + op[1] && cur < cl[0] * 60 + cl[1];
 }
 
 // ── SCREENS ──
 function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  const el = g(id); if (el) el.classList.add('active');
+  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+  var el = g(id);
+  if (el) el.classList.add('active');
 }
 
 function showTab(tab) {
   tg.HapticFeedback.impactOccurred('light');
-  if (tab === 'catalog') { renderCatalog(); showScreen('s-catalog'); }
-  else if (tab === 'bookings') { renderMyBookings(); showScreen('s-mybookings'); }
-  else if (tab === 'profile') { renderProfile(); showScreen('s-profile'); }
+  if      (tab === 'catalog')  { renderCatalog();    showScreen('s-catalog');    }
+  else if (tab === 'bookings') { renderMyBookings();  showScreen('s-mybookings'); }
+  else if (tab === 'profile')  { renderProfile();     showScreen('s-profile');    }
 }
 
 // ── MODAL ──
-function openModal(id) { g(id)?.classList.add('open'); }
-function closeModal(id) { g(id)?.classList.remove('open'); }
-document.addEventListener('click', e => {
+function openModal(id)  { var el = g(id); if (el) el.classList.add('open');    }
+function closeModal(id) { var el = g(id); if (el) el.classList.remove('open'); }
+document.addEventListener('click', function(e) {
   if (e.target.classList.contains('modal')) closeModal(e.target.id);
 });
 
 // ── TOAST ──
-let toastTimer;
-function showToast(msg, type='') {
-  const el = g('toast');
-  el.textContent = msg; el.className = `toast show${type?' '+type:''}`;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+var _toastTimer;
+function showToast(msg, type) {
+  var el = g('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() { el.classList.remove('show'); }, 2800);
 }
 
 // ── BOOT ──
-window.addEventListener('DOMContentLoaded', async () => {
-  // Wait for Firebase module — if fbReady already fired (module runs before DOMContentLoaded)
-  // resolve immediately; otherwise wait up to 5 s before continuing without Firebase.
-  await new Promise(r => {
-    if (window._fbReady !== undefined) return r();
-    const guard = setTimeout(() => { window._fbReady = false; r(); }, 5000);
-    window.addEventListener('fbReady', () => { clearTimeout(guard); r(); }, { once: true });
-  });
+window.addEventListener('DOMContentLoaded', function() {
+  var sp = new URLSearchParams(location.search);
 
-  const sp = new URLSearchParams(location.search);
   if (sp.get('reset') === '1') {
-    ['uid','user','link'].forEach(k => ls.del(k));
-    try { history.replaceState(null, '', location.pathname); } catch {}
+    ['uid','user','link'].forEach(function(k) { ls.del(k); });
+    try { history.replaceState(null, '', location.pathname); } catch(e) {}
   }
 
-  const urlUid = sp.get('uid');
+  var urlUid = sp.get('uid');
   if (urlUid && urlUid.length === 64) {
-    UID = urlUid; ls.set('uid', urlUid);
-    try { history.replaceState(null, '', location.pathname); } catch {}
+    UID = urlUid;
+    ls.set('uid', urlUid);
+    try { history.replaceState(null, '', location.pathname); } catch(e) {}
   } else {
     UID = ls.get('uid');
   }
 
-  setTimeout(boot, 2200);
+  setTimeout(boot, 2300);
 });
 
-// ── Top-level safety net ──────────────────────────────────────────────────────
-// If something prevents boot() from ever calling showScreen (DOMContentLoaded
-// error, unhandled throw, etc.) force a screen after 8 s from page load.
-setTimeout(function safetNet() {
-  if (g('s-splash') && g('s-splash').classList.contains('active')) {
-    try { renderCatalog(); } catch(e) {}
-    showScreen(UID ? 's-catalog' : 's-nouid');
-  }
-}, 8000);
-
 async function boot() {
+  if (!UID) {
+    showScreen('s-nouid');
+    return;
+  }
   try {
-    if (!UID) { showScreen('s-nouid'); return; }
+    var results = await Promise.all([
+      fbGet('user_links', UID),
+      fbGet('users', UID)
+    ]);
+    LINK = results[0];
+    USER = results[1];
 
-    LINK = await fbGet('user_links', UID);
-    USER = await fbGet('users', UID);
-
-    // Fallback: bot registered user but users/{uid} doc was missing (legacy accounts).
+    // Legacy fallback: bot wrote user_links but not users/{uid}
     if (!USER && LINK) {
       USER = {
         uid:       UID,
@@ -643,17 +727,18 @@ async function boot() {
       fbSet('users', UID, USER);
     }
 
-    if (!USER) { showOnboard(); return; }
+    if (!USER) {
+      showOnboard();
+      return;
+    }
 
     g('cli-av').textContent = avLetter(USER.firstName || USER.name);
-    await loadFavs();
-    await loadCatalog();
+    await Promise.all([loadFavs(), loadCatalog()]);
     renderCatalog();
     showScreen('s-catalog');
     startHeartbeat();
     startMyBkSync();
   } catch(e) {
-    // Never leave user on splash — show catalog (possibly empty) on any error.
     try { renderCatalog(); } catch(e2) {}
     showScreen(UID ? 's-catalog' : 's-nouid');
   }
@@ -661,81 +746,89 @@ async function boot() {
 
 // ── HEARTBEAT ──
 function startHeartbeat() {
-  const send = () => { if (UID) fbSet('users', UID, { webAppLastSeen: new Date().toISOString() }); };
-  send(); setInterval(send, 5000);
+  function send() {
+    if (UID) fbSet('users', UID, {webAppLastSeen: new Date().toISOString()});
+  }
+  send();
+  setInterval(send, 15000);
 }
 
 // ── NOTIFICATIONS ──
-async function writeNotif(recipientUid, recipientRole, text, type, bookingId='') {
-  if (!recipientUid || !FB) return;
-  const id = 'notif_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+async function writeNotif(recipientUid, recipientRole, text, type, bookingId) {
+  if (!recipientUid) return;
+  var id = 'notif_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
   await fbSet('notifications', id, {
-    id, type, recipientUid, recipientRole,
-    text, bookingId, sent: false,
+    id: id, type: type, recipientUid: recipientUid, recipientRole: recipientRole,
+    text: text, bookingId: bookingId || '', sent: false,
     createdAt: new Date().toISOString()
   });
 }
 
 // ── REAL-TIME REFRESH (my bookings) ──
-let _myBkTimer = null;
+var _myBkTimer = null;
 function startMyBkSync() {
   if (_myBkTimer) return;
-  _myBkTimer = setInterval(async () => {
-    const el = document.getElementById('mybk-list');
-    if (!el || !document.getElementById('s-mybookings')?.classList.contains('active')) return;
-    if (!FB || !UID) return;
-    const fresh = await fbQuery('bookings', ['clientId','==',UID]);
+  _myBkTimer = setInterval(async function() {
+    var el = document.getElementById('mybk-list');
+    var sc = document.getElementById('s-mybookings');
+    if (!el || !sc || !sc.classList.contains('active')) return;
+    if (!UID) return;
+    var fresh = await fbQuery('bookings', ['clientId','==',UID]);
     renderMyBookingsData(fresh);
-  }, 3000);
+  }, 5000);
 }
 
 // ── FAVOURITES ──
 async function loadFavs() {
-  const doc = await fbGet('favorites', UID);
-  FAVS = doc?.salonIds || [];
+  var doc = await fbGet('favorites', UID);
+  FAVS = (doc && doc.salonIds) ? doc.salonIds : [];
 }
-function isFav(salonId) { return FAVS.includes(salonId); }
+function isFav(salonId) { return FAVS.indexOf(salonId) !== -1; }
 async function toggleFav(salonId, ev) {
   if (ev) ev.stopPropagation();
-  const wasFav = isFav(salonId);
-  if (wasFav) FAVS = FAVS.filter(id => id !== salonId);
-  else FAVS = [...FAVS, salonId];
-  await fbSet('favorites', UID, { salonIds: FAVS, uid: UID });
+  if (isFav(salonId)) {
+    FAVS = FAVS.filter(function(id) { return id !== salonId; });
+  } else {
+    FAVS = FAVS.concat([salonId]);
+  }
+  await fbSet('favorites', UID, {salonIds: FAVS, uid: UID});
   tg.HapticFeedback.impactOccurred('light');
   renderCatalog();
-  // update heart in salon detail if it's open
-  const btn = g('fav-btn');
-  if (btn) { btn.textContent = isFav(salonId) ? '❤️' : '🤍'; btn.title = isFav(salonId)?'Убрать из избранного':'Добавить в избранное'; }
+  var btn = g('fav-btn');
+  if (btn) {
+    btn.textContent = isFav(salonId) ? '❤️' : '🤍';
+    btn.title = isFav(salonId) ? 'Убрать из избранного' : 'Добавить в избранное';
+  }
 }
 
 // ── ONBOARD ──
 function showOnboard() {
-  const tgU = tg.initDataUnsafe?.user;
-  g('ob-fname').value = tgU?.first_name || '';
-  g('ob-lname').value = tgU?.last_name || '';
-  const phone = LINK?.phone ? ('+' + String(LINK.phone).replace(/^\+/,'')) : '';
+  var tgU = tg.initDataUnsafe && tg.initDataUnsafe.user;
+  g('ob-fname').value = (tgU && tgU.first_name) || '';
+  g('ob-lname').value = (tgU && tgU.last_name)  || '';
+  var phone = (LINK && LINK.phone) ? ('+' + String(LINK.phone).replace(/^\+/, '')) : '';
   g('ob-phone').value = phone;
   showScreen('s-onboard');
 }
 
 async function finishOnboard() {
-  const fname = g('ob-fname').value.trim();
-  if (!fname) { showToast('Введите ваше имя','e'); return; }
-  const lname = g('ob-lname').value.trim();
-  const tgU = tg.initDataUnsafe?.user;
+  var fname = g('ob-fname').value.trim();
+  if (!fname) { showToast('Введите ваше имя', 'e'); return; }
+  var lname = g('ob-lname').value.trim();
+  var tgU   = tg.initDataUnsafe && tg.initDataUnsafe.user;
   USER = {
-    uid: UID,
-    tgId: String(tgU?.id || ''),
+    uid:       UID,
+    tgId:      String((tgU && tgU.id) || ''),
     firstName: fname,
-    lastName: lname,
-    name: (fname + ' ' + lname).trim(),
-    phone: LINK?.phone || '',
-    role: 'client',
+    lastName:  lname,
+    name:      (fname + ' ' + lname).trim(),
+    phone:     (LINK && LINK.phone) || '',
+    role:      'client',
     createdAt: new Date().toISOString()
   };
   await fbSet('users', UID, USER);
   g('cli-av').textContent = avLetter(fname);
-  showToast('Добро пожаловать! 🎉','s');
+  showToast('Добро пожаловать! 🎉', 's');
   tg.HapticFeedback.impactOccurred('heavy');
   await loadCatalog();
   renderCatalog();
@@ -745,45 +838,59 @@ async function finishOnboard() {
 
 // ── CATALOG ──
 async function loadCatalog() {
-  ALL_CATS = await fbQuery('categories', ['active','==',true]);
-  ALL_SALONS = await fbQuery('salons', ['status','==','approved'], ['onlineBooking','==',true]);
+  var results = await Promise.all([
+    fbQuery('categories', ['active','==',true]),
+    fbQuery('salons', ['status','==','approved'], ['onlineBooking','==',true])
+  ]);
+  ALL_CATS   = results[0];
+  ALL_SALONS = results[1];
   ls.set('salons', ALL_SALONS);
 }
 
-let activeCat = 'all', searchQ = '';
+var activeCat = 'all', searchQ = '';
 function renderCatalog() {
-  // Category chips
-  const catEl = g('cat-filter');
-  catEl.innerHTML = `<div class="chip${activeCat==='all'?' on':''}" onclick="setCat('all')">Все</div>` +
-    (ALL_CATS.length ? ALL_CATS.map(c => `<div class="chip${activeCat===c.id?' on':''}" onclick="setCat('${c.id}')">${esc(c.icon||'')} ${esc(c.name)}</div>`).join('') :
-     Object.entries({barber:'🪒 Барбер',nails:'💅 Ногти',hair:'✂️ Волосы',skin:'🌿 Косметология',massage:'💆 Массаж',lashes:'👁️ Брови/Ресницы'})
-       .map(([id,name]) => `<div class="chip${activeCat===id?' on':''}" onclick="setCat('${id}')">${name}</div>`).join(''));
+  var catEl = g('cat-filter');
+  var defaultCats = [
+    ['barber','🪒 Барбер'],['nails','💅 Ногти'],['hair','✂️ Волосы'],
+    ['skin','🌿 Косметология'],['massage','💆 Массаж'],['lashes','👁️ Брови/Ресницы']
+  ];
+  var chipsHtml = '<div class="chip' + (activeCat === 'all' ? ' on' : '') + '" onclick="setCat(\'all\')">Все</div>';
+  var cats = ALL_CATS.length ? ALL_CATS : defaultCats.map(function(c) { return {id: c[0], name: c[1]}; });
+  cats.forEach(function(c) {
+    chipsHtml += '<div class="chip' + (activeCat === c.id ? ' on' : '') + '" onclick="setCat(\'' + c.id + '\')">' + esc(c.name) + '</div>';
+  });
+  catEl.innerHTML = chipsHtml;
 
-  // Salon list
-  let salons = ALL_SALONS;
-  if (activeCat !== 'all') salons = salons.filter(s => s.bizType === activeCat || s.categoryId === activeCat);
+  var salons = ALL_SALONS.slice();
+  if (activeCat !== 'all') {
+    salons = salons.filter(function(s) { return s.bizType === activeCat || s.categoryId === activeCat; });
+  }
   if (searchQ) {
-    const q = searchQ.toLowerCase();
-    salons = salons.filter(s => (s.name||'').toLowerCase().includes(q) || (s.addr||'').toLowerCase().includes(q));
+    var q = searchQ.toLowerCase();
+    salons = salons.filter(function(s) {
+      return (s.name || '').toLowerCase().indexOf(q) !== -1 ||
+             (s.addr || '').toLowerCase().indexOf(q) !== -1;
+    });
   }
 
-  // Favourites first
-  const favSalons = salons.filter(s => isFav(s.id));
-  const restSalons = salons.filter(s => !isFav(s.id));
-  salons = [...favSalons, ...restSalons];
+  var favSalons  = salons.filter(function(s) { return  isFav(s.id); });
+  var restSalons = salons.filter(function(s) { return !isFav(s.id); });
+  salons = favSalons.concat(restSalons);
 
-  const el = g('salon-list');
+  var el = g('salon-list');
   if (!salons.length) {
-    el.innerHTML = `<div class="empty"><div class="empty-ico">🔍</div><div class="empty-txt">Ничего не найдено</div></div>`;
+    el.innerHTML = '<div class="empty"><div class="empty-ico">🔍</div><div class="empty-txt">Ничего не найдено</div></div>';
     return;
   }
-  let html = '';
+  var html = '';
   if (favSalons.length && !searchQ && activeCat === 'all') {
-    html += `<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;padding:4px 0 8px;text-transform:uppercase">❤️ Избранное</div>`;
-    html += favSalons.map(s => salonCard(s)).join('');
-    if (restSalons.length) html += `<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;padding:12px 0 8px;text-transform:uppercase">Все салоны</div>`;
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;padding:4px 0 8px;text-transform:uppercase">❤️ Избранное</div>';
+    html += favSalons.map(salonCard).join('');
+    if (restSalons.length) {
+      html += '<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;padding:12px 0 8px;text-transform:uppercase">Все салоны</div>';
+    }
   }
-  html += restSalons.map(s => salonCard(s)).join('');
+  html += restSalons.map(salonCard).join('');
   el.innerHTML = html;
 }
 
@@ -791,94 +898,105 @@ function setCat(id) { activeCat = id; renderCatalog(); }
 function filterSalons(q) { searchQ = q; renderCatalog(); }
 
 function salonCard(s) {
-  const open = isOpen(s.open||'00:00', s.close||'23:59');
-  const fav = isFav(s.id);
-  return `<div class="salon-card" onclick="openSalon('${s.id}')">
-    <div class="salon-cover" style="${s.cover||'background:var(--bg4)'}">
-      ${s.img ? `<img src="${s.img}" alt="">` : `<div class="salon-cover-ico">${s.icon||'✦'}</div>`}
-      <button onclick="toggleFav('${s.id}',event)" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.45);border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2">${fav?'❤️':'🤍'}</button>
-      <div class="salon-badge ${open?'sb-open':'sb-closed'}">${open?'Открыто':'Закрыто'}</div>
-    </div>
-    <div class="salon-body">
-      <div class="salon-name">${esc(s.name)}</div>
-      <div class="salon-type">${esc(s.typeName||s.bizType||'')}</div>
-      <div class="salon-meta">
-        ${s.addr ? `<div class="salon-m">📍 ${esc(s.addr)}</div>` : ''}
-        ${s.open ? `<div class="salon-m">🕐 ${s.open}–${s.close}</div>` : ''}
-        ${s.city ? `<div class="salon-m">🏙 ${esc(s.city)}</div>` : ''}
-      </div>
-    </div>
-  </div>`;
+  var open = isOpen(s.open || '00:00', s.close || '23:59');
+  var fav  = isFav(s.id);
+  return '<div class="salon-card" onclick="openSalon(\'' + s.id + '\')">' +
+    '<div class="salon-cover" style="' + (s.cover || 'background:var(--bg4)') + '">' +
+      (s.img ? '<img src="' + s.img + '" alt="">' : '<div class="salon-cover-ico">' + (s.icon || '✦') + '</div>') +
+      '<button onclick="toggleFav(\'' + s.id + '\',event)" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.45);border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2">' + (fav ? '❤️' : '🤍') + '</button>' +
+      '<div class="salon-badge ' + (open ? 'sb-open' : 'sb-closed') + '">' + (open ? 'Открыто' : 'Закрыто') + '</div>' +
+    '</div>' +
+    '<div class="salon-body">' +
+      '<div class="salon-name">' + esc(s.name) + '</div>' +
+      '<div class="salon-type">'  + esc(s.typeName || s.bizType || '') + '</div>' +
+      '<div class="salon-meta">' +
+        (s.addr ? '<div class="salon-m">📍 ' + esc(s.addr) + '</div>' : '') +
+        (s.open ? '<div class="salon-m">🕐 ' + s.open + '–' + s.close + '</div>' : '') +
+        (s.city ? '<div class="salon-m">🏙 ' + esc(s.city) + '</div>' : '') +
+      '</div>' +
+    '</div>' +
+  '</div>';
 }
 
 // ── SALON DETAIL ──
 async function openSalon(id) {
   curSalonId = id;
-  curSalon = ALL_SALONS.find(s => s.id === id) || await fbGet('salons', id);
+  curSalon   = null;
+  for (var i = 0; i < ALL_SALONS.length; i++) {
+    if (ALL_SALONS[i].id === id) { curSalon = ALL_SALONS[i]; break; }
+  }
+  if (!curSalon) curSalon = await fbGet('salons', id);
   if (!curSalon) return;
 
   g('salon-hdr').textContent = curSalon.name;
-  g('salon-body').innerHTML = `<div class="spin-center"><div class="spinner"></div></div>`;
+  g('salon-body').innerHTML = '<div class="spin-center"><div class="spinner"></div></div>';
   showScreen('s-salon');
 
-  const svcDoc = await fbGet('salon_services', id);
-  const mastDoc = await fbGet('salon_masters', id);
-  curServices = svcDoc?.services || [];
-  curMasters = mastDoc?.masters || [];
+  var docs = await Promise.all([
+    fbGet('salon_services', id),
+    fbGet('salon_masters', id)
+  ]);
+  var svcDoc  = docs[0];
+  var mastDoc = docs[1];
+  curServices = (svcDoc  && svcDoc.services) ? svcDoc.services   : [];
+  curMasters  = (mastDoc && mastDoc.masters)  ? mastDoc.masters  : [];
 
-  const open = isOpen(curSalon.open||'00:00', curSalon.close||'23:59');
-  g('salon-body').innerHTML = `
-    <div style="height:160px;display:flex;align-items:center;justify-content:center;font-size:60px;
-      ${curSalon.cover||'background:var(--bg4)'};position:relative;overflow:hidden">
-      ${curSalon.img ? `<img src="${curSalon.img}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0" alt="">` : `<span style="position:relative;z-index:1">${curSalon.icon||'✦'}</span>`}
-    </div>
-    <div style="padding:16px 20px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
-        <div>
-          <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600;margin-bottom:4px">${esc(curSalon.name)}</div>
-          <div style="font-size:13px;color:var(--acc);font-weight:600">${esc(curSalon.typeName||'')}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <button id="fav-btn" onclick="toggleFav('${curSalon.id}',event)" style="background:var(--bg4);border:none;border-radius:50%;width:36px;height:36px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="${isFav(curSalon.id)?'Убрать из избранного':'Добавить в избранное'}">${isFav(curSalon.id)?'❤️':'🤍'}</button>
-          <span class="badge ${open?'bd-done':'bd-canc'}">${open?'Открыто':'Закрыто'}</span>
-        </div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:13px;color:var(--text2)">
-        ${curSalon.addr?`<div>📍 ${esc(curSalon.addr)}</div>`:''}
-        ${curSalon.open?`<div>🕐 ${curSalon.open} – ${curSalon.close}</div>`:''}
-        ${curSalon.phone?`<div>📞 ${esc(curSalon.phone)}</div>`:''}
-        ${curSalon.instagram?`<div>📸 ${esc(curSalon.instagram)}</div>`:''}
-      </div>
+  var open = isOpen(curSalon.open || '00:00', curSalon.close || '23:59');
+  var html = '<div style="height:160px;display:flex;align-items:center;justify-content:center;font-size:60px;' + (curSalon.cover || 'background:var(--bg4)') + ';position:relative;overflow:hidden">' +
+    (curSalon.img ? '<img src="' + curSalon.img + '" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0" alt="">' : '<span style="position:relative;z-index:1">' + (curSalon.icon || '✦') + '</span>') +
+    '</div>' +
+    '<div style="padding:16px 20px">' +
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">' +
+        '<div>' +
+          '<div style="font-family:\'Playfair Display\',serif;font-size:22px;font-weight:600;margin-bottom:4px">' + esc(curSalon.name) + '</div>' +
+          '<div style="font-size:13px;color:var(--acc);font-weight:600">' + esc(curSalon.typeName || '') + '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<button id="fav-btn" onclick="toggleFav(\'' + curSalon.id + '\',event)" style="background:var(--bg4);border:none;border-radius:50%;width:36px;height:36px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="' + (isFav(curSalon.id) ? 'Убрать из избранного' : 'Добавить в избранное') + '">' + (isFav(curSalon.id) ? '❤️' : '🤍') + '</button>' +
+          '<span class="badge ' + (open ? 'bd-done' : 'bd-canc') + '">' + (open ? 'Открыто' : 'Закрыто') + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:13px;color:var(--text2)">' +
+        (curSalon.addr      ? '<div>📍 ' + esc(curSalon.addr)      + '</div>' : '') +
+        (curSalon.open      ? '<div>🕐 ' + curSalon.open + ' – ' + curSalon.close + '</div>' : '') +
+        (curSalon.phone     ? '<div>📞 ' + esc(curSalon.phone)     + '</div>' : '') +
+        (curSalon.instagram ? '<div>📸 ' + esc(curSalon.instagram) + '</div>' : '') +
+      '</div>';
 
-      ${curMasters.length ? `
-        <div class="sec-hdr"><div class="sec-t">Мастера (${curMasters.length})</div></div>
-        <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;margin-bottom:16px;scrollbar-width:none">
-          ${curMasters.map((m,i) => `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;min-width:64px">
-            <div style="width:56px;height:56px;border-radius:50%;background:${AV_COLS[i%AV_COLS.length]};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff">${avLetter(m.name)}</div>
-            <div style="font-size:11px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${esc(m.name)}</div>
-            <div style="font-size:10px;color:var(--text3);text-align:center">${esc(m.spec||'')}</div>
-          </div>`).join('')}
-        </div>` : ''}
+  if (curMasters.length) {
+    html += '<div class="sec-hdr"><div class="sec-t">Мастера (' + curMasters.length + ')</div></div>' +
+      '<div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;margin-bottom:16px;scrollbar-width:none">' +
+      curMasters.map(function(m, i) {
+        return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;min-width:64px">' +
+          '<div style="width:56px;height:56px;border-radius:50%;background:' + AV_COLS[i % AV_COLS.length] + ';display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff">' + avLetter(m.name) + '</div>' +
+          '<div style="font-size:11px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">' + esc(m.name) + '</div>' +
+          '<div style="font-size:10px;color:var(--text3);text-align:center">' + esc(m.spec || '') + '</div>' +
+        '</div>';
+      }).join('') +
+      '</div>';
+  }
 
-      <div class="sec-hdr"><div class="sec-t">Услуги (${curServices.length})</div></div>
-      ${curServices.map(svc => `
-        <div class="svc-item" onclick="startBooking('${svc.id}')">
-          <div class="svc-ico">${CAT_ICONS[svc.cat]||'✦'}</div>
-          <div class="svc-info">
-            <div class="svc-name">${esc(svc.name)}</div>
-            <div class="svc-dur">${svc.dur} мин</div>
-          </div>
-          <div class="svc-price">${fm(svc.price)}₸</div>
-        </div>`).join('')}
+  html += '<div class="sec-hdr"><div class="sec-t">Услуги (' + curServices.length + ')</div></div>';
+  html += curServices.map(function(svc) {
+    return '<div class="svc-item" onclick="startBooking(\'' + svc.id + '\')">' +
+      '<div class="svc-ico">' + (CAT_ICONS[svc.cat] || '✦') + '</div>' +
+      '<div class="svc-info"><div class="svc-name">' + esc(svc.name) + '</div><div class="svc-dur">' + svc.dur + ' мин</div></div>' +
+      '<div class="svc-price">' + fm(svc.price) + '₸</div>' +
+    '</div>';
+  }).join('');
 
-      <button class="btn btn-acc" style="margin-top:16px" onclick="startBooking(null)">Записаться</button>
-    </div>`;
+  html += '<button class="btn btn-acc" style="margin-top:16px" onclick="startBooking(null)">Записаться</button></div>';
+  g('salon-body').innerHTML = html;
 }
 
 // ── BOOKING WIZARD ──
 function startBooking(svcId) {
-  wiz = { service: null, master: null, date: todayStr(), time: null };
-  if (svcId) wiz.service = curServices.find(s => s.id === svcId) || null;
+  wiz = {service: null, master: null, date: todayStr(), time: null};
+  if (svcId) {
+    for (var i = 0; i < curServices.length; i++) {
+      if (curServices[i].id === svcId) { wiz.service = curServices[i]; break; }
+    }
+  }
   wizStep = wiz.service ? 1 : 0;
   renderWiz();
   showScreen('s-booking');
@@ -887,16 +1005,17 @@ function startBooking(svcId) {
 function bookingBack() {
   if (wizStep === 0) { showScreen('s-salon'); return; }
   wizStep--;
-  if (wizStep === 0 && wiz.service) wizStep = 0;
   renderWiz();
 }
 
 function renderWiz() {
-  const totalSteps = 5;
-  g('wiz-dots').innerHTML = Array.from({length:totalSteps},(_,i) =>
-    `<div class="wiz-step${i<wizStep?' done':i===wizStep?' active':''}"></div>`).join('');
+  var dots = '';
+  for (var i = 0; i < 5; i++) {
+    dots += '<div class="wiz-step' + (i < wizStep ? ' done' : i === wizStep ? ' active' : '') + '"></div>';
+  }
+  g('wiz-dots').innerHTML = dots;
   g('bk-hdr-title').textContent = WIZ_TITLES[wizStep] || 'Запись';
-  if (wizStep === 0) renderWizServices();
+  if      (wizStep === 0) renderWizServices();
   else if (wizStep === 1) renderWizMasters();
   else if (wizStep === 2) renderWizDate();
   else if (wizStep === 3) renderWizTime();
@@ -904,111 +1023,127 @@ function renderWiz() {
 }
 
 function renderWizServices() {
-  g('wiz-body').innerHTML = curServices.map(s => `
-    <div class="svc-item${wiz.service?.id===s.id?' sel':''}" onclick="selService('${s.id}')">
-      <div class="svc-ico">${CAT_ICONS[s.cat]||'✦'}</div>
-      <div class="svc-info"><div class="svc-name">${esc(s.name)}</div><div class="svc-dur">${s.dur} мин</div></div>
-      <div class="svc-price">${fm(s.price)}₸</div>
-    </div>`).join('');
+  g('wiz-body').innerHTML = curServices.map(function(s) {
+    return '<div class="svc-item' + (wiz.service && wiz.service.id === s.id ? ' sel' : '') + '" onclick="selService(\'' + s.id + '\')">' +
+      '<div class="svc-ico">' + (CAT_ICONS[s.cat] || '✦') + '</div>' +
+      '<div class="svc-info"><div class="svc-name">' + esc(s.name) + '</div><div class="svc-dur">' + s.dur + ' мин</div></div>' +
+      '<div class="svc-price">' + fm(s.price) + '₸</div>' +
+    '</div>';
+  }).join('');
 }
 
 function selService(id) {
-  wiz.service = curServices.find(s => s.id === id);
+  for (var i = 0; i < curServices.length; i++) {
+    if (curServices[i].id === id) { wiz.service = curServices[i]; break; }
+  }
   wizStep = 1; renderWiz();
 }
 
 function renderWizMasters() {
-  const avail = curMasters.length ? curMasters : [];
-  g('wiz-body').innerHTML = avail.map((m,i) => `
-    <div class="master-opt${wiz.master?.id===m.id?' sel':''}" onclick="selMaster('${m.id}')">
-      <div class="master-av" style="background:${AV_COLS[i%AV_COLS.length]}">${avLetter(m.name)}</div>
-      <div class="master-info">
-        <div class="master-name">${esc(m.name)}</div>
-        <div class="master-spec">${esc(m.spec||'')} · ${m.open||'09:00'}–${m.close||'19:00'}</div>
-      </div>
-    </div>`).join('');
+  g('wiz-body').innerHTML = curMasters.map(function(m, i) {
+    return '<div class="master-opt' + (wiz.master && wiz.master.id === m.id ? ' sel' : '') + '" onclick="selMaster(\'' + m.id + '\')">' +
+      '<div class="master-av" style="background:' + AV_COLS[i % AV_COLS.length] + '">' + avLetter(m.name) + '</div>' +
+      '<div class="master-info">' +
+        '<div class="master-name">' + esc(m.name) + '</div>' +
+        '<div class="master-spec">' + esc(m.spec || '') + ' · ' + (m.open || '09:00') + '–' + (m.close || '19:00') + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
 function selMaster(id) {
-  wiz.master = curMasters.find(m => m.id === id);
+  for (var i = 0; i < curMasters.length; i++) {
+    if (curMasters[i].id === id) { wiz.master = curMasters[i]; break; }
+  }
   wizStep = 2; renderWiz();
 }
 
 function renderWizDate() {
-  const today = new Date();
-  let html = '<div class="cal-strip" id="wiz-cal">';
-  for (let i = 0; i < 30; i++) {
-    const d = new Date(today); d.setDate(today.getDate()+i);
-    const ds = dateStr(d);
-    const isTd = i === 0;
-    const isSel = ds === wiz.date;
-    html += `<div class="cal-day${isSel?' on':''}${isTd?' today':''}" onclick="selDate('${ds}')">
-      <div class="cal-wd">${WD[d.getDay()]}</div>
-      <div class="cal-d">${d.getDate()}</div>
-    </div>`;
+  var today = new Date();
+  var html = '<div class="cal-strip" id="wiz-cal">';
+  for (var i = 0; i < 30; i++) {
+    var d  = new Date(today);
+    d.setDate(today.getDate() + i);
+    var ds    = dateStr(d);
+    var isTd  = i === 0;
+    var isSel = ds === wiz.date;
+    html += '<div class="cal-day' + (isSel ? ' on' : '') + (isTd ? ' today' : '') + '" onclick="selDate(\'' + ds + '\')">' +
+      '<div class="cal-wd">' + WD[d.getDay()] + '</div>' +
+      '<div class="cal-d">'  + d.getDate()    + '</div>' +
+    '</div>';
   }
   html += '</div>';
-  html += `<button class="btn btn-acc" onclick="wizStep=3;renderWiz()" style="margin-top:8px">Далее →</button>`;
+  html += '<button class="btn btn-acc" onclick="wizStep=3;renderWiz()" style="margin-top:8px">Далее →</button>';
   g('wiz-body').innerHTML = html;
-  setTimeout(() => g('wiz-cal')?.querySelector('.today')?.scrollIntoView({inline:'center',behavior:'smooth'}), 80);
+  setTimeout(function() {
+    var td = g('wiz-cal');
+    if (td) {
+      var el = td.querySelector('.today');
+      if (el) el.scrollIntoView({inline: 'center', behavior: 'smooth'});
+    }
+  }, 80);
 }
 
 function selDate(ds) {
   wiz.date = ds;
-  document.querySelectorAll('#wiz-cal .cal-day').forEach(el => el.classList.remove('on'));
-  event.currentTarget.classList.add('on');
+  var days = document.querySelectorAll('#wiz-cal .cal-day');
+  for (var i = 0; i < days.length; i++) days[i].classList.remove('on');
+  if (event && event.currentTarget) event.currentTarget.classList.add('on');
 }
 
 async function renderWizTime() {
-  g('wiz-body').innerHTML = `<div class="spin-center"><div class="spinner"></div></div>`;
-  const master = wiz.master;
-  const dur = wiz.service?.dur || 60;
+  g('wiz-body').innerHTML = '<div class="spin-center"><div class="spinner"></div></div>';
+  var master = wiz.master;
+  var dur    = (wiz.service && wiz.service.dur) ? wiz.service.dur : 60;
 
-  // Load existing bookings for this master on this date
-  let existing = [];
-  if (FB) {
-    try {
-      existing = await fbQuery('bookings',
-        ['bizId','==',curSalonId],
-        ['masterId','==',master?.id||'m0'],
-        ['date','==',wiz.date],
-        ['status','!=','cancelled']
-      );
-    } catch {}
+  var existing = [];
+  try {
+    existing = await fbQuery('bookings',
+      ['bizId','==',curSalonId],
+      ['masterId','==', master ? master.id : 'm0'],
+      ['date','==',wiz.date],
+      ['status','!=','cancelled']
+    );
+  } catch(e) {}
+
+  if (wiz.date < todayStr()) {
+    g('wiz-body').innerHTML = '<div class="empty"><div class="empty-ico">📅</div><div class="empty-txt">Эта дата уже прошла</div></div>';
+    return;
   }
 
-  const open = master?.open || curSalon?.open || '09:00';
-  const close = master?.close || curSalon?.close || '19:00';
-  const slots = calcSlots(open, close, dur, existing);
+  var open   = (master && master.open)   || (curSalon && curSalon.open)   || '09:00';
+  var close  = (master && master.close)  || (curSalon && curSalon.close)  || '19:00';
+  var slots  = calcSlots(open, close, dur, existing);
+  var freeSlots = slots.filter(function(s) { return !s.busy; });
 
-  const isPast = wiz.date < todayStr();
-  if (isPast) { g('wiz-body').innerHTML = `<div class="empty"><div class="empty-ico">📅</div><div class="empty-txt">Эта дата уже прошла</div></div>`; return; }
-
-  g('wiz-body').innerHTML = `
-    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(wiz.date)}</div>
-    <div class="time-grid">
-      ${slots.map(s => `<div class="ts${s.busy?' busy':''}${wiz.time===s.time?' on':''}" onclick="selTime('${s.time}')">${s.time}</div>`).join('')}
-    </div>
-    ${!slots.filter(s=>!s.busy).length ? `<div class="empty"><div class="empty-ico">😔</div><div class="empty-txt">На этот день все записи заняты</div></div>` : ''}
-  `;
+  g('wiz-body').innerHTML =
+    '<div style="font-size:13px;color:var(--text2);margin-bottom:12px">' + fmDate(wiz.date) + '</div>' +
+    '<div class="time-grid">' +
+    slots.map(function(s) {
+      return '<div class="ts' + (s.busy ? ' busy' : '') + (wiz.time === s.time ? ' on' : '') + '" onclick="selTime(\'' + s.time + '\')">' + s.time + '</div>';
+    }).join('') +
+    '</div>' +
+    (!freeSlots.length ? '<div class="empty"><div class="empty-ico">😔</div><div class="empty-txt">На этот день все записи заняты</div></div>' : '');
 }
 
 function calcSlots(open, close, dur, existing) {
-  const [sh,sm] = open.split(':').map(Number);
-  const [eh,em] = close.split(':').map(Number);
-  let cur = sh*60+sm;
-  const end = eh*60+em;
-  const slots = [];
+  var op  = (open  || '09:00').split(':').map(Number);
+  var cl  = (close || '19:00').split(':').map(Number);
+  var cur = op[0] * 60 + op[1];
+  var end = cl[0] * 60 + cl[1];
+  var slots = [];
   while (cur + dur <= end) {
-    const h = String(Math.floor(cur/60)).padStart(2,'0');
-    const m = String(cur%60).padStart(2,'0');
-    const time = `${h}:${m}`;
-    const busy = existing.some(b => {
-      const [bh,bm] = b.time.split(':').map(Number);
-      const bs = bh*60+bm, be = bs + (b.dur||60);
-      return cur < be && cur+dur > bs;
+    var h    = String(Math.floor(cur / 60)).padStart(2, '0');
+    var m    = String(cur % 60).padStart(2, '0');
+    var time = h + ':' + m;
+    var busy = existing.some(function(b) {
+      if (!b.time) return false;
+      var bp  = b.time.split(':').map(Number);
+      var bs  = bp[0] * 60 + bp[1];
+      var be  = bs + (b.dur || 60);
+      return cur < be && cur + dur > bs;
     });
-    slots.push({ time, busy });
+    slots.push({time: time, busy: busy});
     cur += 30;
   }
   return slots;
@@ -1016,177 +1151,200 @@ function calcSlots(open, close, dur, existing) {
 
 function selTime(t) {
   wiz.time = t;
-  wizStep = 4; renderWiz();
+  wizStep = 4;
+  renderWiz();
 }
 
 function renderWizConfirm() {
-  g('wiz-body').innerHTML = `
-    <div class="bconf">
-      <div class="bc-row"><div class="bc-ico">🏠</div><div><div class="bc-lbl">Салон</div><div class="bc-val">${esc(curSalon.name)}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(wiz.service?.name)}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">${esc(wiz.master?.name||'Любой')}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(wiz.date)}, ${wiz.time}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(wiz.service?.price)}₸ · ${wiz.service?.dur} мин</div></div></div>
-    </div>
-    <button class="btn btn-acc" onclick="confirmBooking()">Подтвердить запись</button>
-    <button class="btn btn-out" style="margin-top:8px" onclick="showScreen('s-salon')">Отмена</button>
-  `;
+  g('wiz-body').innerHTML =
+    '<div class="bconf">' +
+      '<div class="bc-row"><div class="bc-ico">🏠</div><div><div class="bc-lbl">Салон</div><div class="bc-val">'    + esc(curSalon.name)                              + '</div></div></div>' +
+      '<div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">'   + esc(wiz.service && wiz.service.name)            + '</div></div></div>' +
+      '<div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">'   + esc((wiz.master && wiz.master.name) || 'Любой') + '</div></div></div>' +
+      '<div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">' + fmDate(wiz.date) + ', ' + wiz.time         + '</div></div></div>' +
+      '<div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">'   + fm(wiz.service && wiz.service.price) + '₸ · ' + (wiz.service && wiz.service.dur) + ' мин</div></div></div>' +
+    '</div>' +
+    '<button class="btn btn-acc" onclick="confirmBooking()">Подтвердить запись</button>' +
+    '<button class="btn btn-out" style="margin-top:8px" onclick="showScreen(\'s-salon\')">Отмена</button>';
 }
 
 async function confirmBooking() {
   if (!UID || !wiz.service || !wiz.date || !wiz.time) return;
-  const btn = document.querySelector('#wiz-body .btn-acc');
+  var btn = document.querySelector('#wiz-body .btn-acc');
   if (btn) { btn.disabled = true; btn.textContent = 'Проверяем...'; }
 
-  // ── Block check ───────────────────────────────────────────────────────────
-  const clientDocId = curSalonId + '_' + UID;
-  const clientDoc = await fbGet('salon_clients', clientDocId);
-  if (clientDoc?.blocked) {
-    showToast('Запись в этот салон недоступна','e');
+  // Block check
+  var clientDocId = curSalonId + '_' + UID;
+  var clientDoc   = await fbGet('salon_clients', clientDocId);
+  if (clientDoc && clientDoc.blocked) {
+    showToast('Запись в этот салон недоступна', 'e');
     if (btn) { btn.disabled = false; btn.textContent = 'Подтвердить запись'; }
     return;
   }
 
-  // ── Conflict check (fresh data) ──────────────────────────────────────────
-  const freshBks = await fbQuery('bookings',
-    ['bizId','==',curSalonId], ['masterId','==',wiz.master?.id||'m0'], ['date','==',wiz.date]);
-  const conflict = freshBks.filter(b => b.status !== 'cancelled').some(b => b.time === wiz.time);
+  // Conflict check
+  var freshBks = await fbQuery('bookings',
+    ['bizId','==',curSalonId],
+    ['masterId','==', wiz.master ? wiz.master.id : 'm0'],
+    ['date','==',wiz.date]
+  );
+  var conflict = freshBks
+    .filter(function(b) { return b.status !== 'cancelled'; })
+    .some(function(b) { return b.time === wiz.time; });
   if (conflict) {
-    showToast('Это время уже занято, выберите другое','e');
+    showToast('Это время уже занято, выберите другое', 'e');
     if (btn) { btn.disabled = false; btn.textContent = 'Подтвердить запись'; }
     wizStep = 3; renderWiz();
     return;
   }
 
   if (btn) btn.textContent = 'Сохранение...';
-  const clientName = USER?.name || ((USER?.firstName||'') + ' ' + (USER?.lastName||'')).trim() || 'Клиент';
-  const clientPhone = USER?.phone || LINK?.phone || '';
-  const id = 'bk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
-  const booking = {
-    id, bizId: curSalonId, salonName: curSalon.name,
-    clientId: UID, clientName,
-    clientPhone,
-    masterId: wiz.master?.id || 'm0', masterName: wiz.master?.name || 'Мастер',
-    masterUid: wiz.master?.uid || '',
-    adminUid: curSalon.ownerId || '',
-    serviceId: wiz.service.id, serviceName: wiz.service.name,
-    price: wiz.service.price, dur: wiz.service.dur,
-    date: wiz.date, time: wiz.time, status: 'pending', note: '',
-    createdAt: new Date().toISOString(), createdBy: 'client'
+
+  var clientName  = (USER && USER.name) || ((USER && USER.firstName || '') + ' ' + (USER && USER.lastName || '')).trim() || 'Клиент';
+  var clientPhone = (USER && USER.phone) || (LINK && LINK.phone) || '';
+  var id = 'bk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  var booking = {
+    id: id,
+    bizId:       curSalonId,
+    salonName:   curSalon.name,
+    clientId:    UID,
+    clientName:  clientName,
+    clientPhone: clientPhone,
+    masterId:    (wiz.master && wiz.master.id)   || 'm0',
+    masterName:  (wiz.master && wiz.master.name) || 'Мастер',
+    masterUid:   (wiz.master && wiz.master.uid)  || '',
+    adminUid:    curSalon.ownerId || '',
+    serviceId:   wiz.service.id,
+    serviceName: wiz.service.name,
+    price:       wiz.service.price,
+    dur:         wiz.service.dur,
+    date:        wiz.date,
+    time:        wiz.time,
+    status:      'pending',
+    note:        '',
+    createdAt:   new Date().toISOString(),
+    createdBy:   'client'
   };
 
   await fbSet('bookings', id, booking);
 
-  // ── Notify admin and master ───────────────────────────────────────────────
-  const notifText = `📋 Новая запись!\n👤 ${clientName} ${clientPhone}\n✂️ ${wiz.service.name}\n👨‍🎨 ${wiz.master?.name||'Мастер'}\n📅 ${fmDate(wiz.date)}, ${wiz.time}\n🏢 ${curSalon.name}`;
-  if (curSalon.ownerId) await writeNotif(curSalon.ownerId, 'admin', notifText, 'new_booking', id);
-  if (wiz.master?.uid && wiz.master.uid !== curSalon.ownerId)
+  // Notify admin and master
+  var notifText = '📋 Новая запись!\n👤 ' + clientName + ' ' + clientPhone +
+    '\n✂️ ' + wiz.service.name +
+    '\n👨‍🎨 ' + ((wiz.master && wiz.master.name) || 'Мастер') +
+    '\n📅 ' + fmDate(wiz.date) + ', ' + wiz.time +
+    '\n🏢 ' + curSalon.name;
+  if (curSalon.ownerId)
+    await writeNotif(curSalon.ownerId, 'admin', notifText, 'new_booking', id);
+  if (wiz.master && wiz.master.uid && wiz.master.uid !== curSalon.ownerId)
     await writeNotif(wiz.master.uid, 'master', notifText, 'new_booking', id);
 
-  // Auto-add client to salon's client base (deduplicated by bizId+uid)
-  const clientDocId = curSalonId + '_' + UID;
-  const existingClient = await fbGet('salon_clients', clientDocId);
+  // Auto-add client to salon client base
+  var existingClient = await fbGet('salon_clients', clientDocId);
   if (!existingClient) {
     await fbSet('salon_clients', clientDocId, {
       id: clientDocId, bizId: curSalonId,
       clientId: UID, name: clientName, phone: clientPhone,
-      visits: 1, totalSpent: wiz.service?.price || 0,
+      visits: 1, totalSpent: wiz.service.price || 0,
       createdAt: new Date().toISOString(), createdBy: 'client'
     });
   } else {
     await fbSet('salon_clients', clientDocId, {
-      visits: (existingClient.visits || 0) + 1,
-      totalSpent: (existingClient.totalSpent || 0) + (wiz.service?.price || 0)
+      visits:     (existingClient.visits     || 0) + 1,
+      totalSpent: (existingClient.totalSpent || 0) + (wiz.service.price || 0)
     });
   }
 
   tg.HapticFeedback.impactOccurred('heavy');
-  showToast('Запись создана! 🎉','s');
+  showToast('Запись создана! 🎉', 's');
   renderMyBookings();
   showTab('bookings');
 }
 
 // ── MY BOOKINGS ──
 async function renderMyBookings() {
-  g('mybk-list').innerHTML = `<div class="spin-center"><div class="spinner"></div></div>`;
-  let bookings = [];
-  if (FB) bookings = await fbQuery('bookings', ['clientId','==',UID]);
-  else bookings = ls.get('my_bookings') || [];
+  g('mybk-list').innerHTML = '<div class="spin-center"><div class="spinner"></div></div>';
+  var bookings = UID ? await fbQuery('bookings', ['clientId','==',UID]) : (ls.get('my_bookings') || []);
   renderMyBookingsData(bookings);
 }
 
 function renderMyBookingsData(bookings) {
-  bookings = [...bookings].sort((a,b) => {
-    const da = (a.date||'')+(a.time||''), db = (b.date||'')+(b.time||'');
-    return db.localeCompare(da); // newest first
+  bookings = bookings.slice().sort(function(a, b) {
+    var da = (a.date || '') + (a.time || '');
+    var db = (b.date || '') + (b.time || '');
+    return db.localeCompare(da);
   });
 
-  const pip = g('bk-pip');
-  const upcoming = bookings.filter(b => b.date >= todayStr() && b.status !== 'cancelled' && b.status !== 'done');
+  var pip      = g('bk-pip');
+  var upcoming = bookings.filter(function(b) {
+    return b.date >= todayStr() && b.status !== 'cancelled' && b.status !== 'done';
+  });
   if (pip) pip.classList.toggle('vis', upcoming.length > 0);
 
-  const el = g('mybk-list');
+  var el = g('mybk-list');
   if (!bookings.length) {
-    el.innerHTML = `<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Вы ещё не записывались ни в один салон</div></div>`;
+    el.innerHTML = '<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Вы ещё не записывались ни в один салон</div></div>';
     return;
   }
 
-  // Group: upcoming active, then cancelled/done
-  const active = bookings.filter(b => b.status !== 'cancelled' && b.status !== 'done');
-  const past   = bookings.filter(b => b.status === 'cancelled' || b.status === 'done');
-  let html = active.map(b => bkCard(b)).join('');
+  var active = bookings.filter(function(b) { return b.status !== 'cancelled' && b.status !== 'done'; });
+  var past   = bookings.filter(function(b) { return b.status === 'cancelled' || b.status === 'done'; });
+  var html   = active.map(bkCard).join('');
   if (past.length) {
-    html += `<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;padding:16px 0 8px;text-transform:uppercase">История</div>`;
-    html += past.map(b => bkCard(b)).join('');
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;padding:16px 0 8px;text-transform:uppercase">История</div>';
+    html += past.map(bkCard).join('');
   }
   el.innerHTML = html;
 }
 
 function bkCard(b) {
-  return `<div class="bk-card${b.status==='cancelled'?' bk-cancelled':''}" onclick="openBkDetail('${b.id}')">
-    <div class="bk-hdr">
-      <div>
-        <div class="bk-salon">${esc(b.salonName)}</div>
-        <div class="bk-date">${fmDate(b.date)}, ${b.time||''}</div>
-      </div>
-      <span class="badge ${STATUS_C[b.status]||'bd-wait'}">${STATUS_L[b.status]||b.status}</span>
-    </div>
-    <div class="bk-row">💎 ${esc(b.serviceName)}</div>
-    <div class="bk-row">👤 ${esc(b.masterName)}</div>
-    <div class="bk-price">${fm(b.price)}₸</div>
-  </div>`;
+  return '<div class="bk-card" onclick="openBkDetail(\'' + b.id + '\')">' +
+    '<div class="bk-hdr">' +
+      '<div>' +
+        '<div class="bk-salon">' + esc(b.salonName) + '</div>' +
+        '<div class="bk-date">'  + fmDate(b.date) + ', ' + (b.time || '') + '</div>' +
+      '</div>' +
+      '<span class="badge ' + (STATUS_C[b.status] || 'bd-wait') + '">' + (STATUS_L[b.status] || b.status) + '</span>' +
+    '</div>' +
+    '<div class="bk-row">💎 ' + esc(b.serviceName) + '</div>' +
+    '<div class="bk-row">👤 ' + esc(b.masterName)  + '</div>' +
+    '<div class="bk-price">' + fm(b.price) + '₸</div>' +
+  '</div>';
 }
 
-let curBkId = null;
+var curBkId = null;
 async function openBkDetail(id) {
   curBkId = id;
-  const booking = await fbGet('bookings', id);
+  var booking = await fbGet('bookings', id);
   if (!booking) return;
-  const canCancel = booking.status === 'pending' || booking.status === 'confirmed';
-  g('bkdetail-body').innerHTML = `
-    <div class="bconf">
-      <div class="bc-row"><div class="bc-ico">🏠</div><div><div class="bc-lbl">Салон</div><div class="bc-val">${esc(booking.salonName)}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(booking.serviceName)}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">${esc(booking.masterName)}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(booking.date)}, ${booking.time}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(booking.price)}₸</div></div></div>
-    </div>
-    <div style="margin-bottom:12px"><span class="badge ${STATUS_C[booking.status]||'bd-wait'}" style="font-size:13px">${STATUS_L[booking.status]||booking.status}</span></div>
-    ${canCancel ? `<button class="btn btn-rose" onclick="cancelBooking('${id}')">Отменить запись</button>` : ''}
-    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-bkdetail')">Закрыть</button>
-  `;
+  var canCancel = booking.status === 'pending' || booking.status === 'confirmed';
+  g('bkdetail-body').innerHTML =
+    '<div class="bconf">' +
+      '<div class="bc-row"><div class="bc-ico">🏠</div><div><div class="bc-lbl">Салон</div><div class="bc-val">'       + esc(booking.salonName)   + '</div></div></div>' +
+      '<div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">'      + esc(booking.serviceName) + '</div></div></div>' +
+      '<div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">'      + esc(booking.masterName)  + '</div></div></div>' +
+      '<div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">' + fmDate(booking.date) + ', ' + booking.time + '</div></div></div>' +
+      '<div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">'   + fm(booking.price) + '₸</div></div></div>' +
+    '</div>' +
+    '<div style="margin-bottom:12px"><span class="badge ' + (STATUS_C[booking.status] || 'bd-wait') + '" style="font-size:13px">' + (STATUS_L[booking.status] || booking.status) + '</span></div>' +
+    (canCancel ? '<button class="btn btn-rose" onclick="cancelBooking(\'' + id + '\')">Отменить запись</button>' : '') +
+    '<button class="btn btn-out" style="margin-top:8px" onclick="closeModal(\'m-bkdetail\')">Закрыть</button>';
   openModal('m-bkdetail');
 }
 
 async function cancelBooking(id) {
-  tg.showConfirm('Отменить запись?', async yes => {
+  tg.showConfirm('Отменить запись?', async function(yes) {
     if (!yes) return;
-    const bk = await fbGet('bookings', id);
-    await fbSet('bookings', id, { status: 'cancelled', cancelledBy: 'client' });
+    var bk = await fbGet('bookings', id);
+    await fbSet('bookings', id, {status: 'cancelled', cancelledBy: 'client'});
     if (bk) {
-      const clientName = USER?.name || USER?.firstName || 'Клиент';
-      const cancelText = `❌ Клиент отменил запись\n👤 ${clientName}\n✂️ ${bk.serviceName||''}\n👨‍🎨 ${bk.masterName||''}\n📅 ${fmDate(bk.date)}, ${bk.time}`;
-      if (bk.adminUid) await writeNotif(bk.adminUid, 'admin', cancelText, 'cancelled', id);
+      var clientName  = (USER && USER.name) || (USER && USER.firstName) || 'Клиент';
+      var cancelText  = '❌ Клиент отменил запись\n👤 ' + clientName +
+        '\n✂️ ' + (bk.serviceName || '') +
+        '\n👨‍🎨 ' + (bk.masterName || '') +
+        '\n📅 ' + fmDate(bk.date) + ', ' + bk.time;
+      if (bk.adminUid)
+        await writeNotif(bk.adminUid, 'admin', cancelText, 'cancelled', id);
       if (bk.masterUid && bk.masterUid !== bk.adminUid)
         await writeNotif(bk.masterUid, 'master', cancelText, 'cancelled', id);
     }
@@ -1198,46 +1356,47 @@ async function cancelBooking(id) {
 
 // ── PROFILE ──
 function renderProfile() {
-  const name = USER?.name || USER?.firstName || '—';
-  const phone = USER?.phone || LINK?.phone || '—';
-  g('prof-body').innerHTML = `
-    <div class="prof-banner">
-      <div class="prof-av">${avLetter(name)}</div>
-      <div>
-        <div class="prof-n">${esc(name)}</div>
-        <div class="prof-meta">${esc(phone)}</div>
-        <div style="font-size:11px;color:var(--acc);font-weight:700;margin-top:4px">Клиент</div>
-      </div>
-    </div>
-    <div class="menu-list">
-      <button class="menu-item" onclick="openEditName()">
-        <div class="menu-ico mi-t">✏️</div>
-        <div class="menu-txt">Изменить имя</div>
-        <span class="menu-arr">›</span>
-      </button>
-    </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">
-      Zap is... · v1.0<br>UID: <span style="font-family:var(--mono)">${(UID||'').slice(0,12)}...</span>
-    </div>
-  `;
+  var name  = (USER && (USER.name || USER.firstName)) || '—';
+  var phone = (USER && USER.phone) || (LINK && LINK.phone) || '—';
+  g('prof-body').innerHTML =
+    '<div class="prof-banner">' +
+      '<div class="prof-av">' + avLetter(name) + '</div>' +
+      '<div>' +
+        '<div class="prof-n">'    + esc(name)  + '</div>' +
+        '<div class="prof-meta">' + esc(phone) + '</div>' +
+        '<div style="font-size:11px;color:var(--acc);font-weight:700;margin-top:4px">Клиент</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="menu-list">' +
+      '<button class="menu-item" onclick="openEditName()">' +
+        '<div class="menu-ico mi-t">✏️</div>' +
+        '<div class="menu-txt">Изменить имя</div>' +
+        '<span class="menu-arr">›</span>' +
+      '</button>' +
+    '</div>' +
+    '<div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">' +
+      'Zap is... · v2.0<br>UID: <span style="font-family:var(--mono)">' + (UID || '').slice(0, 12) + '...</span>' +
+    '</div>';
 }
 
 function openEditName() {
-  g('en-fname').value = USER?.firstName || '';
-  g('en-lname').value = USER?.lastName || '';
+  g('en-fname').value = (USER && USER.firstName) || '';
+  g('en-lname').value = (USER && USER.lastName)  || '';
   openModal('m-editname');
 }
 
 async function saveName() {
-  const fname = g('en-fname').value.trim();
-  if (!fname) { showToast('Введите имя','e'); return; }
-  const lname = g('en-lname').value.trim();
-  USER.firstName = fname;
-  USER.lastName = lname;
-  USER.name = (fname+' '+lname).trim();
-  await fbSet('users', UID, { firstName: fname, lastName: lname, name: USER.name });
+  var fname = g('en-fname').value.trim();
+  if (!fname) { showToast('Введите имя', 'e'); return; }
+  var lname = g('en-lname').value.trim();
+  if (USER) {
+    USER.firstName = fname;
+    USER.lastName  = lname;
+    USER.name      = (fname + ' ' + lname).trim();
+  }
+  await fbSet('users', UID, {firstName: fname, lastName: lname, name: (fname + ' ' + lname).trim()});
   closeModal('m-editname');
-  showToast('Имя обновлено','s');
+  showToast('Имя обновлено', 's');
   renderProfile();
 }
 </script>
