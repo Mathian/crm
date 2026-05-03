@@ -92,7 +92,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   color:var(--text2);background:none;border:none;cursor:pointer;padding:4px 0}
 
 /* SCROLL */
-.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px);-webkit-overflow-scrolling:touch}
+.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px+env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
 .scroll::-webkit-scrollbar{display:none}
 .scroll-full{flex:1;overflow-y:auto;padding:16px 20px 32px;-webkit-overflow-scrolling:touch}
 .scroll-full::-webkit-scrollbar{display:none}
@@ -273,6 +273,23 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .empty-ico{font-size:44px;opacity:.25}
 .empty-txt{color:var(--text2);font-size:14px;line-height:1.6}
 
+/* REVIEWS */
+.rv-section{margin-top:24px;border-top:1px solid var(--border);padding-top:20px}
+.rv-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.rv-title{font-family:'Playfair Display',serif;font-size:17px;font-weight:600}
+.rv-avg{display:flex;align-items:center;gap:6px}
+.rv-avg-num{font-size:20px;font-weight:700;font-family:var(--mono)}
+.rv-avg-stars{color:var(--amber);font-size:16px;letter-spacing:1px}
+.rv-card{background:var(--bg3);border-radius:var(--rsm);padding:14px 16px;margin-bottom:10px;border:1px solid var(--border)}
+.rv-card-name{font-size:13px;font-weight:700;margin-bottom:3px}
+.rv-card-stars{color:var(--amber);font-size:13px;letter-spacing:1px;margin-bottom:6px}
+.rv-card-text{font-size:13px;color:var(--text2);line-height:1.55}
+.rv-card-date{font-size:11px;color:var(--text3);margin-top:6px}
+.rv-my-card{background:var(--acc3);border:1px solid rgba(45,212,191,.25)}
+.rv-star-row{display:flex;gap:10px;justify-content:center;margin-bottom:16px}
+.rv-star{font-size:28px;cursor:pointer;opacity:.3;transition:opacity .15s,transform .15s;background:none;border:none;padding:0;line-height:1}
+.rv-star.on{opacity:1;transform:scale(1.15)}
+
 /* SPINNER */
 .spin-center{display:flex;align-items:center;justify-content:center;padding:48px}
 .spinner{width:32px;height:32px;border:2.5px solid var(--border2);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
@@ -401,7 +418,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <!-- PROFILE -->
 <div class="screen" id="s-profile">
   <div class="mhdr"><div class="hdr-n">Профиль</div></div>
-  <div class="scroll-full" style="padding-bottom:calc(var(--nav)+16px)">
+  <div class="scroll-full" style="padding-bottom:calc(var(--nav)+16px+env(safe-area-inset-bottom))">
     <div id="prof-body"></div>
   </div>
   <div class="bnav">
@@ -443,6 +460,23 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     </div>
     <button class="btn btn-acc" onclick="saveName()">Сохранить</button>
     <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-editname')">Отмена</button>
+  </div>
+</div>
+
+<!-- REVIEW MODAL -->
+<div class="modal" id="m-review">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title" id="rv-modal-title">Написать отзыв</div>
+    <div class="rv-star-row" id="rv-star-row"></div>
+    <div class="fg" style="margin-bottom:16px">
+      <div class="fld">
+        <label>Комментарий</label>
+        <textarea id="rv-text" rows="4" placeholder="Расскажите о вашем визите..."></textarea>
+      </div>
+    </div>
+    <button class="btn btn-acc" onclick="saveReview()">Сохранить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-review')">Отмена</button>
   </div>
 </div>
 
@@ -569,6 +603,10 @@ async function fbSet(col, id, data) {
   } catch(e) {}
 }
 
+async function fbDelete(col, id) {
+  try { await xhrFetch('DELETE', FB_BASE + '/' + col + '/' + id + '?key=' + FB_KEY, null, 5000); } catch(e) {}
+}
+
 var OP_MAP = {'==':'EQUAL','!=':'NOT_EQUAL','<':'LESS_THAN','<=':'LESS_THAN_OR_EQUAL','>':'GREATER_THAN','>=':'GREATER_THAN_OR_EQUAL'};
 
 async function fbQuery(col) {
@@ -634,6 +672,7 @@ var UID = null, USER = null, LINK = null;
 var ALL_SALONS = [], ALL_CATS = [];
 var FAVS = [];
 var curSalonId = null, curSalon = null, curServices = [], curMasters = [];
+var _salonReviews = [], _myReview = null, _canReview = false, _rvRating = 5;
 var wizStep = 0;
 var wiz = {service: null, master: null, date: null, time: null};
 var WIZ_TITLES = ['Выберите услугу','Выберите мастера','Выберите дату','Выберите время','Подтверждение'];
@@ -1007,12 +1046,19 @@ async function openSalon(id) {
   g('salon-body').innerHTML = '<div class="spin-center"><div class="spinner"></div></div>';
   showScreen('s-salon');
 
+  _salonReviews = []; _myReview = null; _canReview = false;
   var docs = await Promise.all([
     fbGet('salon_services', id),
-    fbGet('salon_masters', id)
+    fbGet('salon_masters', id),
+    fbQuery('reviews', ['salonId','==',id]),
+    UID ? fbQuery('bookings', ['clientId','==',UID], ['bizId','==',id]) : Promise.resolve([])
   ]);
   var svcDoc  = docs[0];
   var mastDoc = docs[1];
+  _salonReviews = docs[2] || [];
+  var _myBks   = docs[3] || [];
+  _myReview    = _salonReviews.find(function(r) { return r.clientUid === UID; }) || null;
+  _canReview   = !!UID && _myBks.some(function(b) { return b.status === 'done'; });
   curMasters  = (mastDoc && mastDoc.masters) ? mastDoc.masters : [];
 
   // Build services from masters (per-master services take priority)
@@ -1073,7 +1119,9 @@ async function openSalon(id) {
     '</div>';
   }).join('');
 
-  html += '<button class="btn btn-acc" style="margin-top:16px" onclick="startBooking(null)">Записаться</button></div>';
+  html += '<button class="btn btn-acc" style="margin-top:16px" onclick="startBooking(null)">Записаться</button>';
+  html += buildReviewsSection();
+  html += '</div>';
   g('salon-body').innerHTML = html;
 }
 
@@ -1503,6 +1551,133 @@ function renderProfile() {
     '<div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">' +
       'Zap is... · v2.0<br>UID: <span style="font-family:var(--mono)">' + (UID || '').slice(0, 12) + '...</span>' +
     '</div>';
+}
+
+// ── REVIEWS ──
+function starsHtml(n, interactive) {
+  if (interactive) {
+    var h = '';
+    for (var i = 1; i <= 5; i++) {
+      h += '<button class="rv-star' + (i <= n ? ' on' : '') + '" onclick="setRvRating(' + i + ')" data-r="' + i + '">★</button>';
+    }
+    return h;
+  }
+  var s = '';
+  for (var i = 1; i <= 5; i++) s += (i <= n ? '★' : '☆');
+  return s;
+}
+
+function setRvRating(n) {
+  _rvRating = n;
+  g('rv-star-row').innerHTML = starsHtml(n, true);
+}
+
+function buildReviewsSection() {
+  var total = _salonReviews.length;
+  var avg   = total ? (_salonReviews.reduce(function(s,r) { return s + (r.rating||0); }, 0) / total) : 0;
+  var h = '<div class="rv-section">';
+  h += '<div class="rv-hdr">';
+  h += '<div class="rv-title">Отзывы' + (total ? ' (' + total + ')' : '') + '</div>';
+  if (total) {
+    h += '<div class="rv-avg"><span class="rv-avg-num">' + avg.toFixed(1) + '</span>';
+    h += '<span class="rv-avg-stars">' + starsHtml(Math.round(avg), false) + '</span></div>';
+  }
+  h += '</div>';
+
+  // CTA block
+  if (_canReview && !_myReview) {
+    h += '<button class="btn btn-out" style="margin-bottom:14px" onclick="openReviewModal(false)">✏️ Написать отзыв</button>';
+  } else if (!_canReview && UID) {
+    h += '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Оставить отзыв можно после завершённого визита</div>';
+  }
+
+  // My review first
+  if (_myReview) {
+    h += '<div class="rv-card rv-my-card">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+    h += '<div><div class="rv-card-name">Ваш отзыв</div>';
+    h += '<div class="rv-card-stars">' + starsHtml(_myReview.rating||5, false) + '</div></div>';
+    h += '<div style="display:flex;gap:8px">';
+    h += '<button class="btn btn-sm btn-ghost" onclick="openReviewModal(true)">✎</button>';
+    h += '<button class="btn btn-sm btn-rose" onclick="deleteMyReview()">🗑</button>';
+    h += '</div></div>';
+    if (_myReview.text) h += '<div class="rv-card-text">' + esc(_myReview.text) + '</div>';
+    h += '<div class="rv-card-date">' + (_myReview.updatedAt ? new Date(_myReview.updatedAt).toLocaleDateString('ru-RU') : '') + '</div>';
+    h += '</div>';
+  }
+
+  // Other reviews
+  var others = _salonReviews.filter(function(r) { return r.clientUid !== UID; });
+  if (!others.length && !_myReview) {
+    h += '<div style="font-size:13px;color:var(--text3);text-align:center;padding:16px 0">Отзывов пока нет</div>';
+  }
+  others.forEach(function(r) {
+    h += '<div class="rv-card">';
+    h += '<div class="rv-card-name">' + esc(r.clientName || 'Клиент') + '</div>';
+    h += '<div class="rv-card-stars">' + starsHtml(r.rating||5, false) + '</div>';
+    if (r.text) h += '<div class="rv-card-text">' + esc(r.text) + '</div>';
+    h += '<div class="rv-card-date">' + (r.createdAt ? new Date(r.createdAt).toLocaleDateString('ru-RU') : '') + '</div>';
+    h += '</div>';
+  });
+
+  h += '</div>';
+  return h;
+}
+
+function openReviewModal(editing) {
+  _rvRating = _myReview && editing ? (_myReview.rating || 5) : 5;
+  g('rv-modal-title').textContent = editing ? 'Редактировать отзыв' : 'Написать отзыв';
+  g('rv-star-row').innerHTML = starsHtml(_rvRating, true);
+  g('rv-text').value = (editing && _myReview) ? (_myReview.text || '') : '';
+  openModal('m-review');
+}
+
+async function saveReview() {
+  if (!UID) return;
+  var isEdit = !!_myReview;
+  var text = g('rv-text').value.trim();
+  var docId = curSalonId + '_' + UID;
+  var now = new Date().toISOString();
+  var data = {
+    salonId:    curSalonId,
+    clientUid:  UID,
+    clientName: (USER && USER.name) || 'Клиент',
+    rating:     _rvRating,
+    text:       text,
+    updatedAt:  now
+  };
+  if (!isEdit) data.createdAt = now;
+  await fbSet('reviews', docId, data);
+  if (isEdit) {
+    Object.assign(_myReview, data);
+  } else {
+    _myReview = Object.assign({id: docId}, data);
+    _salonReviews.push(_myReview);
+  }
+  closeModal('m-review');
+  showToast(isEdit ? 'Отзыв обновлён ✓' : 'Отзыв сохранён ✓', 's');
+  var body = g('salon-body');
+  if (body) {
+    var rvSec = body.querySelector('.rv-section');
+    if (rvSec) rvSec.outerHTML = buildReviewsSection();
+    else body.insertAdjacentHTML('beforeend', buildReviewsSection());
+  }
+}
+
+function deleteMyReview() {
+  tg.showConfirm('Удалить ваш отзыв?', async function(ok) {
+    if (!ok) return;
+    var docId = curSalonId + '_' + UID;
+    await fbDelete('reviews', docId);
+    _salonReviews = _salonReviews.filter(function(r) { return r.clientUid !== UID; });
+    _myReview = null;
+    showToast('Отзыв удалён');
+    var body = g('salon-body');
+    if (body) {
+      var rvSec = body.querySelector('.rv-section');
+      if (rvSec) rvSec.outerHTML = buildReviewsSection();
+    }
+  });
 }
 
 function openEditName() {

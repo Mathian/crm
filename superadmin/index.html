@@ -68,7 +68,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .hdr-g{font-size:11px;color:var(--text3);font-weight:500;letter-spacing:.3px}
 .hdr-n{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;line-height:1.2}
 .avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;cursor:pointer;flex-shrink:0;background:linear-gradient(135deg,#60a5fa,#3b82f6)}
-.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px);-webkit-overflow-scrolling:touch}
+.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px+env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
 .scroll::-webkit-scrollbar{display:none}
 .scroll-full{flex:1;overflow-y:auto;padding:16px 20px 32px;-webkit-overflow-scrolling:touch}
 .scroll-full::-webkit-scrollbar{display:none}
@@ -401,8 +401,13 @@ function renderSalons(){
 async function openSalonDetail(id){
   const s=ALL_SALONS.find(x=>x.id===id)||await fbGet('salons',id);if(!s)return;
   const owner=ALL_USERS.find(u=>u.uid===s.ownerId);
-  const bookings=await fbQuery('bookings',['bizId','==',id]);
+  const [bookings,reviews]=await Promise.all([
+    fbQuery('bookings',['bizId','==',id]),
+    fbQuery('reviews',['salonId','==',id])
+  ]);
   const revenue=bookings.filter(b=>b.status==='done').reduce((sum,b)=>sum+Number(b.price),0);
+  const avgRating=reviews.length?(reviews.reduce((s,r)=>s+(r.rating||0),0)/reviews.length).toFixed(1):null;
+  function rvStars(n){let s='';for(let i=1;i<=5;i++)s+=i<=n?'★':'☆';return s;}
   g('ms-title').textContent=s.name;
   g('ms-body').innerHTML=`
     <div style="display:flex;gap:14px;align-items:center;margin-bottom:16px">
@@ -430,7 +435,26 @@ async function openSalonDetail(id){
     </div>`:''}
     ${s.status==='approved'?`<button class="btn btn-amber" style="margin-bottom:8px" onclick="blockSalon('${s.id}')">🚫 Заблокировать</button>`:''}
     ${s.status==='blocked'?`<button class="btn btn-green" style="margin-bottom:8px" onclick="unblockSalon('${s.id}')">🔓 Разблокировать</button>`:''}
-    <button class="btn btn-out" onclick="closeModal('m-salon')">Закрыть</button>`;
+    <button class="btn btn-out" style="margin-bottom:20px" onclick="closeModal('m-salon')">Закрыть</button>
+    <div style="border-top:1px solid var(--border);padding-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:700">Отзывы (${reviews.length})</div>
+        ${avgRating?`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:18px;font-weight:700;font-family:var(--mono)">${avgRating}</span><span style="color:var(--amber);font-size:15px">${rvStars(Math.round(Number(avgRating)))}</span></div>`:''}
+      </div>
+      ${reviews.length?reviews.map(r=>`
+        <div style="background:var(--bg3);border-radius:var(--rsm);padding:12px 14px;margin-bottom:8px;border:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+            <div>
+              <div style="font-size:13px;font-weight:700;margin-bottom:2px">${esc(r.clientName||'Клиент')}</div>
+              <div style="color:var(--amber);font-size:13px;letter-spacing:1px">${rvStars(r.rating||5)}</div>
+            </div>
+            <button class="btn btn-sm btn-rose" style="padding:6px 10px" onclick="saDeleteReview('${r.id}','${s.id}')">🗑 Удалить</button>
+          </div>
+          ${r.text?`<div style="font-size:13px;color:var(--text2);line-height:1.5">${esc(r.text)}</div>`:''}
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">${r.createdAt?new Date(r.createdAt).toLocaleDateString('ru-RU'):'—'}</div>
+        </div>
+      `).join(''):`<div style="font-size:13px;color:var(--text3);text-align:center;padding:12px 0">Отзывов нет</div>`}
+    </div>`;
   openModal('m-salon');
 }
 
@@ -458,6 +482,12 @@ async function unblockSalon(id){
   showToast('Салон разблокирован','s');renderSalons();
 }
 function updateSalon(id,upd){const idx=ALL_SALONS.findIndex(s=>s.id===id);if(idx>=0)Object.assign(ALL_SALONS[idx],upd);}
+async function saDeleteReview(reviewId,salonId){
+  if(!confirm('Удалить этот отзыв?'))return;
+  await fbDelete('reviews',reviewId);
+  showToast('Отзыв удалён');
+  openSalonDetail(salonId);
+}
 
 // ── USERS ──
 function renderUsers(){

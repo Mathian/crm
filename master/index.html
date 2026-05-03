@@ -69,7 +69,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .hdr-g{font-size:11px;color:var(--text3);font-weight:500;letter-spacing:.3px}
 .hdr-n{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;line-height:1.2}
 .avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#111;cursor:pointer;flex-shrink:0;background:linear-gradient(135deg,#fbbf24,#d97706)}
-.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px);-webkit-overflow-scrolling:touch}
+.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px+env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
 .scroll::-webkit-scrollbar{display:none}
 .scroll-full{flex:1;overflow-y:auto;padding:16px 20px 32px;-webkit-overflow-scrolling:touch}
 .scroll-full::-webkit-scrollbar{display:none}
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <!-- PROFILE -->
 <div class="screen" id="s-prof">
   <div class="mhdr"><div class="hdr-n">Профиль</div></div>
-  <div class="scroll-full" style="padding-bottom:calc(var(--nav)+16px)">
+  <div class="scroll-full" style="padding-bottom:calc(var(--nav)+16px+env(safe-area-inset-bottom))">
     <div id="prof-body"></div>
   </div>
   <div class="bnav">
