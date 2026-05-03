@@ -173,6 +173,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   cursor:pointer;transition:all var(--ease);flex-shrink:0;background:var(--bg3)}
 .cal-day.on{border-color:var(--acc);background:var(--acc3)}
 .cal-day.today .cal-d{color:var(--acc)}
+.cal-day.offday{border-color:var(--rose)!important;background:var(--rose2)!important}
+.cal-day.offday .cal-wd,.cal-day.offday .cal-d{color:var(--rose)!important}
+.cal-day.full-day{opacity:.35}
 .cal-wd{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .cal-d{font-family:var(--mono);font-size:18px;font-weight:500;line-height:1}
 .cal-pip{width:5px;height:5px;border-radius:50%;background:var(--acc);margin-top:2px;opacity:0}
@@ -412,17 +415,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <div class="screen" id="s-svcs">
   <div class="mhdr">
     <div class="hdr-n">Услуги и мастера</div>
-    <button class="btn btn-sm btn-acc" style="width:auto" id="svcs-add-btn" onclick="openAddSvc()">+ Услуга</button>
+    <button class="btn btn-sm btn-acc" style="width:auto" onclick="openModal('m-add-master')">+ Мастер</button>
   </div>
   <div class="scroll">
-    <div style="display:flex;gap:8px;margin-bottom:16px">
-      <div class="chip on" id="svctab-s" onclick="svcsTab('s')">💎 Услуги</div>
-      <div class="chip" id="svctab-m" onclick="svcsTab('m')">👩‍💼 Мастера</div>
-    </div>
-    <div id="svcs-panel"><div id="a-svc-list"></div></div>
-    <div id="masters-panel" style="display:none">
+    <div id="masters-panel">
       <div id="a-masters-list"></div>
-      <button class="btn btn-out" style="margin-top:8px" onclick="openModal('m-add-master')">+ Добавить мастера</button>
     </div>
   </div>
   <div class="bnav">
@@ -547,8 +544,70 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <option value="120">120 мин</option>
       </select>
     </div>
+    <div class="fld" style="margin-top:8px">
+      <label>Режим слотов</label>
+      <select id="am-slot-mode" onchange="toggleAmSlotMode()">
+        <option value="interval">Интервальный (каждые N мин)</option>
+        <option value="custom">Ручные слоты (конкретные часы)</option>
+      </select>
+    </div>
+    <div id="am-custom-wrap" class="fld" style="display:none">
+      <label>Конкретные часы приёма (через запятую или перенос строки)</label>
+      <textarea id="am-custom-times" rows="3" placeholder="11:00, 13:30, 16:00"></textarea>
+    </div>
     <button class="btn btn-acc" style="margin-top:16px" onclick="inviteMaster()">Отправить приглашение</button>
     <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-add-master')">Отмена</button>
+  </div>
+</div>
+
+<div class="modal" id="m-edit-master">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title">Настройки мастера</div>
+    <div class="fg" id="em-body">
+      <div class="fr">
+        <div class="fld"><label>Имя</label><input type="text" id="em-name" placeholder="Имя мастера"></div>
+        <div class="fld"><label>Специализация</label><input type="text" id="em-spec" placeholder="Нейл-мастер"></div>
+      </div>
+      <div class="fr">
+        <div class="fld"><label>Начало работы</label><input type="time" id="em-open" value="09:00"></div>
+        <div class="fld"><label>Конец работы</label><input type="time" id="em-close" value="19:00"></div>
+      </div>
+      <div class="sec-lbl" style="margin-top:12px">Рабочие дни</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="em-days-wrap">
+        <div class="chip on" data-d="1" onclick="toggleEmDay(this)">Пн</div>
+        <div class="chip on" data-d="2" onclick="toggleEmDay(this)">Вт</div>
+        <div class="chip on" data-d="3" onclick="toggleEmDay(this)">Ср</div>
+        <div class="chip on" data-d="4" onclick="toggleEmDay(this)">Чт</div>
+        <div class="chip on" data-d="5" onclick="toggleEmDay(this)">Пт</div>
+        <div class="chip" data-d="6" onclick="toggleEmDay(this)">Сб</div>
+        <div class="chip" data-d="0" onclick="toggleEmDay(this)">Вс</div>
+      </div>
+      <div class="fld">
+        <label>Режим слотов</label>
+        <select id="em-slot-mode" onchange="toggleEmSlotMode()">
+          <option value="interval">Интервальный (каждые N мин)</option>
+          <option value="custom">Ручные слоты (конкретные часы)</option>
+        </select>
+      </div>
+      <div id="em-interval-wrap" class="fld">
+        <label>Интервал (мин)</label>
+        <select id="em-interval">
+          <option value="30">30 мин</option>
+          <option value="45">45 мин</option>
+          <option value="60" selected>60 мин</option>
+          <option value="90">90 мин</option>
+          <option value="120">120 мин</option>
+        </select>
+      </div>
+      <div id="em-custom-wrap" class="fld" style="display:none">
+        <label>Конкретные часы приёма (через запятую или перенос строки)</label>
+        <textarea id="em-custom-times" rows="3" placeholder="11:00, 13:30, 16:00"></textarea>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Пример: 11:00, 13:30, 15:00, 17:30</div>
+      </div>
+    </div>
+    <button class="btn btn-acc" style="margin-top:16px" onclick="saveMasterEdits()">Сохранить</button>
+    <button class="btn btn-out" style="margin-top:8px" onclick="closeModal('m-edit-master')">Отмена</button>
   </div>
 </div>
 
@@ -1113,11 +1172,17 @@ function nbSelSvc(id){
 }
 function renderNbDate(){
   const today=new Date();
+  const master=nbData.master;
+  const open=master?.open||BIZ.open||'09:00',close=master?.close||BIZ.close||'21:00';
   let html=`<div class="cal-strip" id="nb-cal">`;
-  for(let i=0;i<30;i++){
+  for(let i=0;i<60;i++){
     const d=new Date(today);d.setDate(today.getDate()+i);const ds=dateStr(d);
+    const isOff=!isMasterWorkDay(master,ds);
+    const dayBks=BOOKINGS.filter(b=>b.date===ds&&b.masterId===(master?.id||'')&&b.status!=='cancelled');
+    const slots=calcSlots(open,close,dayBks,master?.slotInterval||60,ds);
+    const isFull=!isOff&&!slots.some(s=>!s.busy);
     const isSel=ds===(nbData.date||todayStr());
-    html+=`<div class="cal-day${isSel?' on':''}${i===0?' today':''}" onclick="nbSelDate('${ds}')">
+    html+=`<div class="cal-day${isSel?' on':''}${i===0?' today':''}${isOff?' offday':''}${isFull?' full-day':''}" onclick="nbSelDate('${ds}')">
       <div class="cal-wd">${WD[d.getDay()]}</div><div class="cal-d">${d.getDate()}</div></div>`;
   }
   html+=`</div><button class="btn btn-acc" onclick="nbStep=4;renderNb()" style="margin-top:8px">Далее →</button>`;
@@ -1134,8 +1199,10 @@ async function renderNbTime(){
   const open=master?.open||BIZ.open||'09:00',close=master?.close||BIZ.close||'21:00';
   const slots=calcSlots(open,close,existing,master?.slotInterval||60,nbData.date);
   if(!slots.length){g('nb-body').innerHTML=`<div class="empty"><div class="empty-ico">🕐</div><div class="empty-txt">Нет доступных слотов на эту дату</div></div>`;return;}
-  g('nb-body').innerHTML=`
-    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(nbData.date)}</div>
+  const isOffDay=!isMasterWorkDay(nbData.master,nbData.date);
+  g('nb-body').innerHTML=
+    (isOffDay?`<div style="background:var(--rose2);border-radius:var(--rsm);padding:10px 14px;margin-bottom:12px;color:var(--rose);font-weight:700;font-size:13px">⚠️ Выходной день — запись вне расписания мастера</div>`:'')+
+    `<div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(nbData.date)}</div>
     <div class="time-grid">${slots.map(s=>`<div class="ts${s.busy?' busy':''}${nbData.time===s.time?' on':''}" onclick="${s.busy?'':("nbSelTime('"+s.time+"')")}">${s.time}</div>`).join('')}</div>`;
 }
 function nbSelTime(t){nbData.time=t;nbStep=5;renderNb();}
@@ -1305,17 +1372,9 @@ async function toggleBlockClient(id){
 
 // ── SERVICES ──
 function renderSvcs(){
-  renderSvcList();renderMasterList();
+  renderMasterList();
 }
-function svcsTab(t){
-  const isS=t==='s';
-  g('svctab-s')?.classList.toggle('on',isS);
-  g('svctab-m')?.classList.toggle('on',!isS);
-  g('svcs-panel').style.display=isS?'':'none';
-  g('masters-panel').style.display=isS?'none':'';
-  g('svcs-add-btn').textContent=isS?'+ Услуга':'';
-  g('svcs-add-btn').style.display=isS?'':'none';
-}
+function svcsTab(t){}  // kept for safety, no-op now
 function renderSvcList(){
   const el=g('a-svc-list');if(!el)return;
   el.innerHTML=SERVICES.length?SERVICES.map(s=>`
@@ -1370,7 +1429,10 @@ function renderMasterList(){
             <div class="master-spec">${esc(m.spec||'')} · ${m.open}–${m.close}</div>
             <div style="font-size:11px;color:var(--text3)">${esc(m.phone)}</div>
           </div>
-          ${!m.isOwner?`<button class="btn btn-sm btn-rose" style="width:auto" onclick="removeMaster('${m.id}')">✕</button>`:''}
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-ghost" style="width:auto" onclick="editMaster('${m.id}')">✎ График</button>
+            ${!m.isOwner?`<button class="btn btn-sm btn-rose" style="width:auto" onclick="removeMaster('${m.id}')">✕</button>`:''}
+          </div>
         </div>
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;letter-spacing:.3px">УСЛУГИ МАСТЕРА</div>
@@ -1445,10 +1507,74 @@ async function saveMasterSvc(){
   _editingMstrId=null;_editingSvcId2=null;
 }
 function toggleMasterDay(el){el.classList.toggle('on');}
+function toggleEmDay(el){el.classList.toggle('on');}
 function getMasterWorkDays(){
   const days=[];
   g('am-days-wrap')?.querySelectorAll('.chip').forEach(el=>{if(el.classList.contains('on'))days.push(Number(el.dataset.d));});
   return days;
+}
+function getEmWorkDays(){
+  const days=[];
+  g('em-days-wrap')?.querySelectorAll('.chip').forEach(el=>{if(el.classList.contains('on'))days.push(Number(el.dataset.d));});
+  return days;
+}
+function parseCustomTimes(raw){
+  return (raw||'').split(/[\n,]+/).map(s=>s.trim()).filter(s=>/^\d{1,2}:\d{2}$/.test(s));
+}
+function toggleAmSlotMode(){
+  const isCustom=g('am-slot-mode')?.value==='custom';
+  if(g('am-custom-wrap'))g('am-custom-wrap').style.display=isCustom?'':'none';
+  if(g('am-interval')?.closest('.fld'))g('am-interval').closest('.fld').style.display=isCustom?'none':'';
+}
+function toggleEmSlotMode(){
+  const isCustom=g('em-slot-mode')?.value==='custom';
+  if(g('em-custom-wrap'))g('em-custom-wrap').style.display=isCustom?'':'none';
+  if(g('em-interval-wrap'))g('em-interval-wrap').style.display=isCustom?'none':'';
+}
+// helper used by calendar and time slot generation
+function isMasterWorkDay(master,ds){
+  if(!master||!master.workDays||!master.workDays.length)return true;
+  const day=new Date(ds+'T00:00:00').getDay();
+  return master.workDays.indexOf(day)!==-1;
+}
+let _editingMasterId=null;
+function editMaster(id){
+  _editingMasterId=id;
+  const m=MASTERS.find(x=>x.id===id);if(!m)return;
+  g('em-name').value=m.name||'';
+  g('em-spec').value=m.spec||'';
+  g('em-open').value=m.open||'09:00';
+  g('em-close').value=m.close||'19:00';
+  // Work days
+  g('em-days-wrap')?.querySelectorAll('.chip').forEach(el=>{
+    el.classList.toggle('on',m.workDays?(m.workDays.indexOf(Number(el.dataset.d))!==-1):([1,2,3,4,5].indexOf(Number(el.dataset.d))!==-1));
+  });
+  // Slot mode
+  const hasCustom=m.customTimes&&m.customTimes.length>0;
+  if(g('em-slot-mode'))g('em-slot-mode').value=hasCustom?'custom':'interval';
+  if(g('em-interval'))g('em-interval').value=String(m.slotInterval||60);
+  if(g('em-custom-times'))g('em-custom-times').value=(m.customTimes||[]).join(', ');
+  toggleEmSlotMode();
+  openModal('m-edit-master');
+}
+async function saveMasterEdits(){
+  const id=_editingMasterId;if(!id)return;
+  const idx=MASTERS.findIndex(m=>m.id===id);if(idx<0)return;
+  const isCustom=g('em-slot-mode')?.value==='custom';
+  const workDays=getEmWorkDays();
+  const customTimes=isCustom?parseCustomTimes(g('em-custom-times')?.value||''):[];
+  const slotInterval=isCustom?60:Number(g('em-interval')?.value||60);
+  Object.assign(MASTERS[idx],{
+    name:g('em-name')?.value?.trim()||MASTERS[idx].name,
+    spec:g('em-spec')?.value?.trim()||MASTERS[idx].spec,
+    open:g('em-open')?.value||MASTERS[idx].open,
+    close:g('em-close')?.value||MASTERS[idx].close,
+    workDays,slotInterval,customTimes
+  });
+  await fbSet('salon_masters',BIZ.id,{masters:MASTERS});
+  closeModal('m-edit-master');showToast('Настройки мастера сохранены','s');
+  renderMasterList();
+  _editingMasterId=null;
 }
 async function inviteMaster(){
   const phone=(g('am-phone')?.value||'').trim().replace(/[\s\-\(\)]/g,'');
@@ -1466,12 +1592,14 @@ async function inviteMaster(){
   const masterId='m_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
   const open=g('am-open')?.value||'09:00';
   const close=g('am-close')?.value||'19:00';
-  const slotInterval=Number(g('am-interval')?.value||60);
+  const isAmCustom=g('am-slot-mode')?.value==='custom';
+  const slotInterval=isAmCustom?60:Number(g('am-interval')?.value||60);
+  const customTimes=isAmCustom?parseCustomTimes(g('am-custom-times')?.value||''):[];
   const workDays=getMasterWorkDays();
 
   // Only create invite — master joins salon_masters AFTER accepting
   const invite={id:inviteId,bizId:BIZ.id,salonName:BIZ.name,salonId:BIZ.id,
-    phone,name,spec,open,close,workDays,slotInterval,
+    phone,name,spec,open,close,workDays,slotInterval,customTimes,
     masterId,status:'pending',createdAt:new Date().toISOString()};
   await fbSet('master_invites',inviteId,invite);
   PENDING_INVITES.push(invite);

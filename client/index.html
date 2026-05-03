@@ -1152,28 +1152,55 @@ function renderWizMasters() {
   }).join('');
 }
 
-function selMaster(id) {
+// helper: check if a date string (yyyy-mm-dd) is a master workday
+function isMasterWorkDay(master, ds) {
+  if (!master || !master.workDays || !master.workDays.length) return true;
+  var day = new Date(ds + 'T00:00:00').getDay(); // 0=Sun,1=Mon,...6=Sat
+  return master.workDays.indexOf(day) !== -1;
+}
+
+var _wizMasterBookings = [];
+async function selMaster(id) {
   for (var i = 0; i < curMasters.length; i++) {
     if (curMasters[i].id === id) { wiz.master = curMasters[i]; break; }
   }
+  // Pre-load master bookings to compute slot availability per day
+  g('wiz-body').innerHTML = '<div class="spin-center"><div class="spinner"></div></div>';
+  try { _wizMasterBookings = await fbQuery('bookings', ['bizId','==',curSalonId], ['masterId','==',id]); }
+  catch(e) { _wizMasterBookings = []; }
   wizStep = 2; renderWiz();
 }
 
 function renderWizDate() {
   var today = new Date();
+  var master = wiz.master;
+  var open  = (master && master.open)  || (curSalon && curSalon.open)  || '09:00';
+  var close = (master && master.close) || (curSalon && curSalon.close) || '19:00';
   var html = '<div class="cal-strip" id="wiz-cal">';
-  for (var i = 0; i < 30; i++) {
+  var hasAny = false;
+  for (var i = 0; i < 60; i++) {
     var d  = new Date(today);
     d.setDate(today.getDate() + i);
     var ds    = dateStr(d);
-    var isTd  = i === 0;
+    // Skip off days entirely for client
+    if (!isMasterWorkDay(master, ds)) continue;
+    // Skip fully booked days (but always show today so user sees why it's full)
+    var dayBks = _wizMasterBookings.filter(function(b) { return b.date === ds && b.status !== 'cancelled'; });
+    var allSlots = calcSlots(open, close, dayBks, master);
+    var freeSlots = allSlots.filter(function(s) { return !s.busy; });
+    if (!freeSlots.length && i > 0) continue;
+    hasAny = true;
     var isSel = ds === wiz.date;
-    html += '<div class="cal-day' + (isSel ? ' on' : '') + (isTd ? ' today' : '') + '" onclick="selDate(\'' + ds + '\')">' +
+    html += '<div class="cal-day' + (isSel ? ' on' : '') + (i === 0 ? ' today' : '') + '" onclick="selDate(\'' + ds + '\')">' +
       '<div class="cal-wd">' + WD[d.getDay()] + '</div>' +
       '<div class="cal-d">'  + d.getDate()    + '</div>' +
     '</div>';
   }
-  html += '</div>';
+  if (!hasAny) {
+    html = '<div class="empty"><div class="empty-ico">😔</div><div class="empty-txt">Нет доступных дней для записи</div></div>';
+  } else {
+    html += '</div>';
+  }
   html += '<button class="btn btn-acc" onclick="wizStep=3;renderWiz()" style="margin-top:8px">Далее →</button>';
   g('wiz-body').innerHTML = html;
   setTimeout(function() {
@@ -1237,7 +1264,7 @@ function calcSlots(open, close, existing, master) {
   var now    = new Date();
   var nowMin = (wiz.date === todayStr()) ? now.getHours() * 60 + now.getMinutes() : -1;
   var slots  = [];
-  while (cur < end) {
+  while (cur <= end) {
     var h    = String(Math.floor(cur / 60)).padStart(2, '0');
     var m    = String(cur % 60).padStart(2, '0');
     var time = h + ':' + m;

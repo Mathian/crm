@@ -86,6 +86,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .cal-day{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;padding:10px 6px;border-radius:var(--r);border:1.5px solid var(--border);cursor:pointer;transition:all var(--ease);flex-shrink:0;background:var(--bg3)}
 .cal-day.on{border-color:var(--acc);background:var(--acc3)}
 .cal-day.today .cal-d{color:var(--acc)}
+.cal-day.offday{border-color:var(--rose)!important;background:var(--rose2)!important}
+.cal-day.offday .cal-wd,.cal-day.offday .cal-d{color:var(--rose)!important}
+.cal-day.full-day{opacity:.35}
 .cal-wd{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .cal-d{font-family:var(--mono);font-size:18px;font-weight:500;line-height:1}
 .cal-pip{width:5px;height:5px;border-radius:50%;background:var(--acc);margin-top:2px;opacity:0}
@@ -282,7 +285,7 @@ const tg=window.Telegram?.WebApp||{ready:()=>{},expand:()=>{},initDataUnsafe:{us
 tg.ready();tg.expand();
 
 let UID=null,USER=null,LINK=null,BIZ=null,MY_MASTER=null;
-let BOOKINGS=[],SERVICES=[];
+let BOOKINGS=[],SERVICES=[],CLIENTS=[];
 let selDate=todayStr();
 let nbStep=0,nbData={};
 let selStatusF='all'; // 'all' | 'pending'
@@ -349,6 +352,7 @@ async function findMySalon(phone){
   }
   const _bkRaw=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id]);
   BOOKINGS=_bkRaw; // keep all statuses
+  try{CLIENTS=await fbQuery('salon_clients',['bizId','==',BIZ.id]);}catch{CLIENTS=[];}
   g('mst-name').textContent=MY_MASTER.name||USER.firstName;
   g('mst-av').textContent=avLetter(MY_MASTER.name||USER.firstName);
   renderSched();
@@ -477,9 +481,11 @@ async function openBkDetail(id){
 }
 
 async function confirmBk(id){
-  const bk=BOOKINGS.find(b=>b.id===id);
+  let bk=BOOKINGS.find(b=>b.id===id);
   const idx=BOOKINGS.findIndex(b=>b.id===id);
+  if(!bk){bk=await fbGet('bookings',id);}
   if(idx>=0)BOOKINGS[idx].status='confirmed';
+  else if(bk){const updated={...bk,status:'confirmed'};BOOKINGS.push(updated);bk=updated;}
   await fbSet('bookings',id,{status:'confirmed'});
   if(bk){
     const svcInfo=`${esc(bk.serviceName)} · ${fmDate(bk.date)} ${bk.time}`;
@@ -487,7 +493,7 @@ async function confirmBk(id){
     if(bk.adminUid)await writeNotif(bk.adminUid,'admin',`✅ Мастер подтвердил запись: ${esc(bk.clientName)}, ${svcInfo}`,'confirmed',id);
   }
   closeModal('m-bkdetail');showToast('Запись подтверждена','s');
-  renderFilters();renderSchedList();
+  renderFilters();renderCalStrip();renderSchedList();
 }
 function showDoneDialog(id){
   const bk=BOOKINGS.find(b=>b.id===id);if(!bk)return;
@@ -547,16 +553,37 @@ function renderNb(){
   else if(nbStep===4)renderNbConfirm();
 }
 function renderNbClient(){
-  g('nb-body').innerHTML=`<div class="fg" style="margin-bottom:16px">
-    <div class="fld"><label>Имя клиента</label><input type="text" id="nb-cn" placeholder="Имя"></div>
-    <div class="fld"><label>Телефон</label><input type="tel" id="nb-cp" placeholder="+7..."></div>
-    <div class="fld"><label>Заметка</label><input type="text" id="nb-cnote" placeholder="Необязательно"></div>
-  </div>
-  <button class="btn btn-acc" onclick="nbNextClient()">Далее →</button>`;
+  g('nb-body').innerHTML=`
+    <div class="fg" style="margin-bottom:12px">
+      <div class="fld"><label>Имя</label><input type="text" id="nb-cn" placeholder="Имя клиента" oninput="nbMasterClientSearch(this.value)"></div>
+      <div class="fld"><label>Телефон</label><input type="tel" id="nb-cp" placeholder="+7..."></div>
+      <div class="fld"><label>Заметка</label><input type="text" id="nb-cnote" placeholder="Необязательно"></div>
+    </div>
+    <div id="nb-m-suggest" style="margin-bottom:10px"></div>
+    <button class="btn btn-acc" onclick="nbNextClient()">Далее →</button>`;
+}
+function nbMasterClientSearch(q){
+  const el=g('nb-m-suggest');if(!el)return;
+  if(!q){el.innerHTML='';return;}
+  const matches=CLIENTS.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())||(c.phone||'').includes(q));
+  el.innerHTML=matches.slice(0,4).map(c=>`<div style="background:var(--bg3);border-radius:var(--rsm);padding:10px 14px;margin-bottom:6px;cursor:pointer" onclick="nbMasterSelClient('${c.id}')">
+    <div style="font-size:14px;font-weight:600">${esc(c.name)}</div>
+    <div style="font-size:12px;color:var(--text2)">${esc(c.phone)}</div>
+  </div>`).join('');
+}
+function nbMasterSelClient(id){
+  const c=CLIENTS.find(cl=>cl.id===id);if(!c)return;
+  if(g('nb-cn'))g('nb-cn').value=c.name;
+  if(g('nb-cp'))g('nb-cp').value=c.phone;
+  g('nb-m-suggest').innerHTML='';
+  // Store uid for notification
+  if(!nbData.client)nbData.client={};
+  nbData.client._uid=c.uid||'';
 }
 function nbNextClient(){
   const name=(g('nb-cn')?.value||'').trim();if(!name){showToast('Введите имя','e');return;}
-  nbData.client={name,phone:g('nb-cp')?.value||'',note:g('nb-cnote')?.value||''};
+  const uid=nbData.client?._uid||'';
+  nbData.client={name,phone:g('nb-cp')?.value||'',note:g('nb-cnote')?.value||'',_uid:uid};
   nbStep=1;renderNb();
 }
 function renderNbSvc(){
@@ -573,8 +600,14 @@ function renderNbSvc(){
 function nbSelSvc(id){nbData.service=SERVICES.find(s=>s.id===id);nbStep=2;renderNb();}
 function renderNbDate(){
   const today=new Date();let html=`<div class="cal-strip" id="nb-cal">`;
-  for(let i=0;i<30;i++){const d=new Date(today);d.setDate(today.getDate()+i);const ds=dateStr(d);
-    html+=`<div class="cal-day${(nbData.date||todayStr())===ds?' on':''}${i===0?' today':''}" onclick="nbSelDate('${ds}')"><div class="cal-wd">${WD[d.getDay()]}</div><div class="cal-d">${d.getDate()}</div></div>`;}
+  const open=MY_MASTER?.open||'09:00',close=MY_MASTER?.close||'19:00';
+  for(let i=0;i<60;i++){
+    const d=new Date(today);d.setDate(today.getDate()+i);const ds=dateStr(d);
+    const isOff=!isMasterWorkDay(MY_MASTER,ds);
+    const dayBks=BOOKINGS.filter(b=>b.date===ds&&b.status!=='cancelled');
+    const slots=calcSlots(open,close,null,dayBks,ds);
+    const isFull=!isOff&&!slots.some(s=>!s.busy);
+    html+=`<div class="cal-day${(nbData.date||todayStr())===ds?' on':''}${i===0?' today':''}${isOff?' offday':''}${isFull?' full-day':''}" onclick="nbSelDate('${ds}')"><div class="cal-wd">${WD[d.getDay()]}</div><div class="cal-d">${d.getDate()}</div></div>`;}
   html+=`</div><button class="btn btn-acc" onclick="nbStep=3;renderNb()" style="margin-top:8px">Далее →</button>`;
   g('nb-body').innerHTML=html;
   if(!nbData.date)nbData.date=todayStr();
@@ -587,11 +620,31 @@ async function renderNbTime(){
   try{const _ex=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id],['date','==',nbData.date]);existing=_ex.filter(b=>b.status!=='cancelled');}catch{}
   const open=MY_MASTER.open||'09:00',close=MY_MASTER.close||'19:00';
   const slots=calcSlots(open,close,null,existing,nbData.date);
-  g('nb-body').innerHTML=`<div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(nbData.date)}</div>
+  const isOffDay=!isMasterWorkDay(MY_MASTER,nbData.date);
+  g('nb-body').innerHTML=
+    (isOffDay?`<div style="background:var(--rose2);border-radius:var(--rsm);padding:10px 14px;margin-bottom:12px;color:var(--rose);font-weight:700;font-size:13px">⚠️ Выходной день — запись вне расписания</div>`:'')+
+    `<div style="font-size:13px;color:var(--text2);margin-bottom:12px">${fmDate(nbData.date)}</div>
     <div class="time-grid">${slots.map(s=>`<div class="ts${s.busy?' busy':''}${nbData.time===s.time?' on':''}" onclick="nbSelTime('${s.time}')">${s.time}</div>`).join('')}</div>`;
 }
 function nbSelTime(t){nbData.time=t;nbStep=4;renderNb();}
+function isMasterWorkDay(master,ds){
+  if(!master||!master.workDays||!master.workDays.length)return true;
+  const day=new Date(ds+'T00:00:00').getDay();
+  return master.workDays.indexOf(day)!==-1;
+}
 function calcSlots(open,close,_dur,existing,forDate){
+  const master=MY_MASTER;
+  // Custom times mode
+  if(master&&master.customTimes&&master.customTimes.length){
+    const isToday=(forDate||todayStr())===todayStr();
+    const now=new Date();const nowMin=isToday?now.getHours()*60+now.getMinutes():-1;
+    return master.customTimes.map(time=>{
+      const[h,m]=time.split(':').map(Number);const cur=h*60+m;
+      const isPast=cur<=nowMin;
+      const busy=isPast||(existing||[]).some(b=>b.time===time);
+      return{time,busy};
+    });
+  }
   const step=MY_MASTER?.slotInterval||30;
   const[sh,sm]=open.split(':').map(Number);const[eh,em]=close.split(':').map(Number);
   let cur=sh*60+sm;const end=eh*60+em;const slots=[];
@@ -619,7 +672,7 @@ async function saveNewBooking(){
   const id='bk_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
   const bk={id,bizId:BIZ.id,salonName:BIZ.name,
     clientId:'manual_'+Date.now(),clientName:nbData.client.name,clientPhone:nbData.client.phone,
-    clientUid:'',
+    clientUid:nbData.client?._uid||'',
     masterId:MY_MASTER.id,masterName:MY_MASTER.name,masterUid:MY_MASTER.uid||UID,
     adminUid:BIZ.ownerId||'',
     serviceId:nbData.service.id,serviceName:nbData.service.name,
@@ -628,6 +681,10 @@ async function saveNewBooking(){
     createdAt:new Date().toISOString(),createdBy:'master'};
   await fbSet('bookings',id,bk);
   BOOKINGS.push(bk);
+  // Notify client about new booking by master
+  const _clientNotifUid=nbData.client?._uid||bk.clientUid||'';
+  if(_clientNotifUid)await writeNotif(_clientNotifUid,'client',
+    `📅 Мастер ${esc(MY_MASTER.name)} записал вас: ${esc(nbData.service.name)} · ${fmDate(nbData.date)} ${nbData.time} в ${esc(BIZ.name)}`,'new_booking',id);
   // Notify admin about new booking
   if(BIZ.ownerId)await writeNotif(BIZ.ownerId,'admin',
     `📋 Мастер ${esc(MY_MASTER.name)} создал запись: ${esc(nbData.client.name)}, ${esc(nbData.service.name)} · ${fmDate(nbData.date)} ${nbData.time}`,
