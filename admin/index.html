@@ -741,7 +741,7 @@ async function boot(){
 function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
 
 // ── REAL-TIME SYNC ──
-let _syncInt=null,_lastBkHash='',_lastCliHash='';
+let _syncInt=null,_lastBkHash='',_lastCliHash='',_lastInvHash='';
 function _hashBk(arr){return arr.map(x=>x.id+'|'+(x.status||'')).sort().join(',');}
 function startSync(){
   if(_syncInt)clearInterval(_syncInt);
@@ -756,13 +756,18 @@ function startSync(){
       const cliH=_hashBk(cli);
       const cliChanged=cliH!==_lastCliHash;
       if(cliChanged){CLIENTS=cli;_lastCliHash=cliH;}
+      const invs=await fbQuery('master_invites',['bizId','==',BIZ.id],['status','==','pending']);
+      const invH=_hashBk(invs);
+      const invChanged=invH!==_lastInvHash;
+      if(invChanged){PENDING_INVITES=invs;_lastInvHash=invH;}
       if(bkChanged||cliChanged){
         if(curTab==='dash')renderDash();
         else if(curTab==='sched'){renderMasterFilter();renderSchedList();}
         else if(curTab==='clients')renderClients();
       }
+      if(invChanged&&curTab==='svcs')renderMasterList();
     }catch{}
-  },3000);
+  },5000);
 }
 
 // ── BTYPE GRID ──
@@ -798,6 +803,7 @@ async function createSalon(){
 }
 
 // ── LOAD DATA ──
+let PENDING_INVITES=[];
 async function loadData(){
   const svcDoc=await fbGet('salon_services',BIZ.id);
   const mstDoc=await fbGet('salon_masters',BIZ.id);
@@ -805,6 +811,7 @@ async function loadData(){
   MASTERS=mstDoc?.masters||[];
   BOOKINGS=await fbQuery('bookings',['bizId','==',BIZ.id]);
   CLIENTS=await fbQuery('salon_clients',['bizId','==',BIZ.id]);
+  PENDING_INVITES=await fbQuery('master_invites',['bizId','==',BIZ.id],['status','==','pending']);
 }
 
 // ── TABS ──
@@ -1027,15 +1034,16 @@ async function updateBk(id,status){
 }
 
 // ── NEW BOOKING ──
-const NB_TITLES=['Клиент','Услуга','Мастер','Дата','Время','Подтвердить'];
+// Step order: 0=Client, 1=Master, 2=Service(from master), 3=Date, 4=Time, 5=Confirm
+const NB_TITLES=['Клиент','Мастер','Услуга','Дата','Время','Подтвердить'];
 function openNewBooking(){
   nbStep=0;nbData={};renderNb();openModal('m-new-booking');
 }
 function renderNb(){
   g('nb-steps').innerHTML=NB_TITLES.map((_,i)=>`<div class="wiz-step${i<nbStep?' done':i===nbStep?' active':''}"></div>`).join('');
   if(nbStep===0)renderNbClient();
-  else if(nbStep===1)renderNbSvc();
-  else if(nbStep===2)renderNbMaster();
+  else if(nbStep===1)renderNbMaster();
+  else if(nbStep===2)renderNbSvc();
   else if(nbStep===3)renderNbDate();
   else if(nbStep===4)renderNbTime();
   else if(nbStep===5)renderNbConfirm();
@@ -1070,17 +1078,9 @@ function nbNextClient(){
   const phone=(g('nb-cphone')?.value||'').trim();
   if(!name){showToast('Введите имя клиента','e');return;}
   if(!nbData.client)nbData.client={id:'new_'+Date.now(),name,phone};
+  else{nbData.client.name=name;nbData.client.phone=phone;}
   nbStep=1;renderNb();
 }
-function renderNbSvc(){
-  g('nb-body').innerHTML=SERVICES.map(s=>`
-    <div class="svc-item${nbData.service?.id===s.id?' sel':''}" style="cursor:pointer" onclick="nbSelSvc('${s.id}')">
-      <div class="svc-ico">${CAT_ICONS[s.cat]||'✦'}</div>
-      <div class="svc-info"><div class="svc-name">${esc(s.name)}</div></div>
-      <div class="svc-price">${fm(s.price)}₸</div>
-    </div>`).join('');
-}
-function nbSelSvc(id){nbData.service=SERVICES.find(s=>s.id===id);nbStep=2;renderNb();}
 function renderNbMaster(){
   g('nb-body').innerHTML=MASTERS.map((m,i)=>`
     <div class="master-card" style="cursor:pointer;border:1.5px solid ${nbData.master?.id===m.id?'var(--acc)':'var(--border)'};background:${nbData.master?.id===m.id?'var(--acc3)':'var(--bg3)'}" onclick="nbSelMaster('${m.id}')">
@@ -1088,7 +1088,29 @@ function renderNbMaster(){
       <div class="master-info"><div class="master-name">${esc(m.name)}</div><div class="master-spec">${esc(m.spec||'')} · ${m.open}–${m.close}</div></div>
     </div>`).join('');
 }
-function nbSelMaster(id){nbData.master=MASTERS.find(m=>m.id===id);nbStep=3;renderNb();}
+function nbSelMaster(id){nbData.master=MASTERS.find(m=>m.id===id);nbData.service=null;nbStep=2;renderNb();}
+function renderNbSvc(){
+  // Show services from selected master, fallback to global SERVICES
+  const master=nbData.master;
+  const svcs=(master&&(master.services||[]).length)?(master.services):SERVICES;
+  if(!svcs.length){
+    g('nb-body').innerHTML=`<div class="empty"><div class="empty-ico">💎</div><div class="empty-txt">У этого мастера нет услуг. Добавьте услуги в разделе Мастера.</div></div>
+      <button class="btn btn-out" style="margin-top:12px" onclick="nbStep=1;renderNb()">← Назад</button>`;
+    return;
+  }
+  g('nb-body').innerHTML=svcs.map(s=>`
+    <div class="svc-item${nbData.service?.id===s.id?' sel':''}" style="cursor:pointer" onclick="nbSelSvc('${s.id}')">
+      <div class="svc-ico">${CAT_ICONS[s.cat]||'✦'}</div>
+      <div class="svc-info"><div class="svc-name">${esc(s.name)}</div></div>
+      <div class="svc-price">${fm(s.price)}₸</div>
+    </div>`).join('');
+}
+function nbSelSvc(id){
+  const master=nbData.master;
+  const svcs=(master&&(master.services||[]).length)?(master.services):SERVICES;
+  nbData.service=svcs.find(s=>s.id===id);
+  nbStep=3;renderNb();
+}
 function renderNbDate(){
   const today=new Date();
   let html=`<div class="cal-strip" id="nb-cal">`;
@@ -1146,9 +1168,18 @@ function renderNbConfirm(){
 }
 async function saveNewBooking(){
   const id='bk_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+  // Resolve clientUid: use what's stored in salon_clients, else look up by phone in user_links
+  let clientUid=nbData.client.uid||nbData.client.clientId||'';
+  if(!clientUid&&nbData.client.phone){
+    // Try user_links query by phone
+    try{
+      const links=await fbQuery('user_links',['phone','==',nbData.client.phone]);
+      if(links.length)clientUid=links[0].uid||links[0].id||'';
+    }catch{}
+  }
   const bk={id,bizId:BIZ.id,salonName:BIZ.name,
     clientId:nbData.client.id,clientName:nbData.client.name,clientPhone:nbData.client.phone||'',
-    clientUid:nbData.client.uid||'',
+    clientUid,
     masterId:nbData.master.id,masterName:nbData.master.name,masterUid:nbData.master.uid||'',
     adminUid:UID,
     serviceId:nbData.service.id,serviceName:nbData.service.name,
@@ -1296,14 +1327,22 @@ function renderSvcList(){
     </div>`).join(''):`<div class="empty"><div class="empty-ico">💎</div><div class="empty-txt">Услуг пока нет</div></div>`;
 }
 let editingSvcId=null;
-function openAddSvc(){editingSvcId=null;g('asvc-title').textContent='Новая услуга';g('asvc-btn').textContent='Добавить';g('as-name').value='';g('as-price').value='';openModal('m-add-svc');}
+function openAddSvc(){
+  _editingMstrId=null;_editingSvcId2=null;
+  editingSvcId=null;g('asvc-title').textContent='Новая услуга';g('asvc-btn').textContent='Добавить';
+  g('as-name').value='';g('as-price').value='';if(g('as-cat'))g('as-cat').value='other';
+  openModal('m-add-svc');
+}
 function editSvc(id){
+  _editingMstrId=null;_editingSvcId2=null;
   editingSvcId=id;const s=SERVICES.find(svc=>svc.id===id);if(!s)return;
   g('asvc-title').textContent='Редактировать услугу';g('asvc-btn').textContent='Сохранить';
-  g('as-name').value=s.name;g('as-price').value=s.price;g('as-cat').value=s.cat||'other';
+  g('as-name').value=s.name;g('as-price').value=s.price;if(g('as-cat'))g('as-cat').value=s.cat||'other';
   openModal('m-add-svc');
 }
 async function saveService(){
+  // Route to per-master service save if editing a master's service
+  if(_editingMstrId!==null){await saveMasterSvc();return;}
   const name=(g('as-name')?.value||'').trim();const price=Number(g('as-price')?.value)||0;const cat=g('as-cat')?.value||'other';
   if(!name){showToast('Введите название','e');return;}
   if(editingSvcId){
@@ -1319,16 +1358,91 @@ async function saveService(){
 // ── MASTERS ──
 function renderMasterList(){
   const el=g('a-masters-list');if(!el)return;
-  el.innerHTML=MASTERS.length?MASTERS.map((m,i)=>`
-    <div class="master-card">
-      <div class="master-av" style="background:${AV_COLS[i%AV_COLS.length]}">${avLetter(m.name)}</div>
-      <div class="master-info">
-        <div class="master-name">${esc(m.name)}${m.isOwner?' <span style="font-size:10px;color:var(--acc)">Вы</span>':''}</div>
-        <div class="master-spec">${esc(m.spec||'')} · ${m.open}–${m.close}</div>
-        <div style="font-size:11px;color:var(--text3)">${esc(m.phone)}</div>
-      </div>
-      ${!m.isOwner?`<button class="btn btn-sm btn-rose" style="width:auto" onclick="removeMaster('${m.id}')">✕</button>`:''}
-    </div>`).join(''):`<div class="empty"><div class="empty-ico">👩‍💼</div><div class="empty-txt">Мастеров нет. Добавьте первого!</div></div>`;
+  let html='';
+  // Active masters
+  if(MASTERS.length){
+    html+=MASTERS.map((m,i)=>`
+      <div class="master-card" style="flex-direction:column;align-items:stretch;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="master-av" style="background:${AV_COLS[i%AV_COLS.length]}">${avLetter(m.name)}</div>
+          <div class="master-info" style="flex:1">
+            <div class="master-name">${esc(m.name)}${m.isOwner?' <span style="font-size:10px;color:var(--acc)">Вы</span>':''}</div>
+            <div class="master-spec">${esc(m.spec||'')} · ${m.open}–${m.close}</div>
+            <div style="font-size:11px;color:var(--text3)">${esc(m.phone)}</div>
+          </div>
+          ${!m.isOwner?`<button class="btn btn-sm btn-rose" style="width:auto" onclick="removeMaster('${m.id}')">✕</button>`:''}
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;letter-spacing:.3px">УСЛУГИ МАСТЕРА</div>
+          ${(m.services||[]).length?
+            (m.services||[]).map(s=>`<div style="display:flex;align-items:center;gap:8px;background:var(--bg4);border-radius:var(--rsm);padding:8px 12px;margin-bottom:5px">
+              <div style="flex:1;font-size:13px;font-weight:600">${esc(s.name)}</div>
+              <div style="font-family:var(--mono);font-size:13px;color:var(--acc)">${fm(s.price)}₸</div>
+              <button class="btn btn-sm btn-ghost" style="width:auto;padding:4px 8px;font-size:11px" onclick="editMasterSvc('${m.id}','${s.id}')">✎</button>
+              <button class="btn btn-sm btn-rose" style="width:auto;padding:4px 8px;font-size:11px" onclick="delMasterSvc('${m.id}','${s.id}')">✕</button>
+            </div>`).join(''):
+            `<div style="font-size:12px;color:var(--text3);padding:4px 0">Услуги не добавлены</div>`
+          }
+          <button class="btn btn-sm btn-ghost" style="width:auto;margin-top:6px" onclick="openAddMasterSvc('${m.id}')">+ Услуга</button>
+        </div>
+      </div>`).join('');
+  } else {
+    html+=`<div class="empty"><div class="empty-ico">👩‍💼</div><div class="empty-txt">Мастеров нет. Добавьте первого!</div></div>`;
+  }
+  // Pending invites
+  if(PENDING_INVITES.length){
+    html+=`<div class="sec-hdr" style="margin-top:16px"><div class="sec-t" style="color:var(--amber)">⏳ Ожидают ответа (${PENDING_INVITES.length})</div></div>`;
+    html+=PENDING_INVITES.map(inv=>`
+      <div class="master-card" style="opacity:.8">
+        <div class="master-av" style="background:#555;font-size:18px">?</div>
+        <div class="master-info" style="flex:1">
+          <div class="master-name">${esc(inv.name)}</div>
+          <div class="master-spec">${esc(inv.phone)} · ожидает</div>
+        </div>
+        <button class="btn btn-sm btn-rose" style="width:auto" onclick="cancelInvite('${inv.id}')">Отозвать</button>
+      </div>`).join('');
+  }
+  el.innerHTML=html;
+}
+// ── PER-MASTER SERVICES ──
+let _editingMstrId=null,_editingSvcId2=null;
+function openAddMasterSvc(masterId){
+  _editingMstrId=masterId;_editingSvcId2=null;
+  g('asvc-title').textContent='Новая услуга';g('asvc-btn').textContent='Добавить';
+  g('as-name').value='';g('as-price').value='';if(g('as-cat'))g('as-cat').value='other';
+  openModal('m-add-svc');
+}
+function editMasterSvc(masterId,svcId){
+  _editingMstrId=masterId;_editingSvcId2=svcId;
+  const m=MASTERS.find(x=>x.id===masterId);if(!m)return;
+  const s=(m.services||[]).find(x=>x.id===svcId);if(!s)return;
+  g('asvc-title').textContent='Редактировать услугу';g('asvc-btn').textContent='Сохранить';
+  g('as-name').value=s.name;g('as-price').value=s.price;if(g('as-cat'))g('as-cat').value=s.cat||'other';
+  openModal('m-add-svc');
+}
+async function delMasterSvc(masterId,svcId){
+  const idx=MASTERS.findIndex(m=>m.id===masterId);if(idx<0)return;
+  MASTERS[idx].services=(MASTERS[idx].services||[]).filter(s=>s.id!==svcId);
+  await fbSet('salon_masters',BIZ.id,{masters:MASTERS});
+  renderMasterList();
+}
+async function saveMasterSvc(){
+  const name=(g('as-name')?.value||'').trim();const price=Number(g('as-price')?.value)||0;const cat=g('as-cat')?.value||'other';
+  if(!name){showToast('Введите название','e');return;}
+  if(_editingMstrId){
+    // Per-master service
+    const idx=MASTERS.findIndex(m=>m.id===_editingMstrId);if(idx<0)return;
+    if(!MASTERS[idx].services)MASTERS[idx].services=[];
+    if(_editingSvcId2){
+      const si=MASTERS[idx].services.findIndex(s=>s.id===_editingSvcId2);
+      if(si>=0)MASTERS[idx].services[si]={...MASTERS[idx].services[si],name,price,cat};
+    } else {
+      MASTERS[idx].services.push({id:'s_'+Date.now(),name,price,cat,bizId:BIZ.id});
+    }
+    await fbSet('salon_masters',BIZ.id,{masters:MASTERS});
+  }
+  closeModal('m-add-svc');showToast('Сохранено','s');renderSvcList();renderMasterList();
+  _editingMstrId=null;_editingSvcId2=null;
 }
 function toggleMasterDay(el){el.classList.toggle('on');}
 function getMasterWorkDays(){
@@ -1341,6 +1455,13 @@ async function inviteMaster(){
   const name=(g('am-name')?.value||'').trim();
   const spec=(g('am-spec')?.value||'').trim();
   if(!phone||!name){showToast('Заполните обязательные поля','e');return;}
+  // Check if invite already pending for this phone
+  const dupInv=PENDING_INVITES.find(i=>i.phone===phone);
+  if(dupInv){showToast('Приглашение для этого номера уже отправлено','e');return;}
+  // Check if master with this phone already in salon
+  const dupMst=MASTERS.find(m=>m.phone===phone);
+  if(dupMst){showToast('Мастер с таким номером уже в салоне','e');return;}
+
   const inviteId='inv_'+Date.now();
   const masterId='m_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
   const open=g('am-open')?.value||'09:00';
@@ -1348,20 +1469,22 @@ async function inviteMaster(){
   const slotInterval=Number(g('am-interval')?.value||60);
   const workDays=getMasterWorkDays();
 
-  // 1. Create bot invite so master gets notified
+  // Only create invite — master joins salon_masters AFTER accepting
   const invite={id:inviteId,bizId:BIZ.id,salonName:BIZ.name,salonId:BIZ.id,
     phone,name,spec,open,close,workDays,slotInterval,
     masterId,status:'pending',createdAt:new Date().toISOString()};
   await fbSet('master_invites',inviteId,invite);
-
-  // 2. Add master directly to salon_masters so list updates immediately
-  const newMaster={id:masterId,bizId:BIZ.id,phone,name,spec,open,close,workDays,slotInterval,
-    uid:'',color:MASTERS.length%6,createdAt:new Date().toISOString()};
-  MASTERS.push(newMaster);
-  await fbSet('salon_masters',BIZ.id,{masters:MASTERS});
+  PENDING_INVITES.push(invite);
 
   closeModal('m-add-master');
-  showToast('Мастер добавлен! Приглашение отправлено в бот.','s');
+  showToast('Приглашение отправлено мастеру через бот.','s');
+  renderMasterList();
+}
+async function cancelInvite(inviteId){
+  const inv=PENDING_INVITES.find(i=>i.id===inviteId);if(!inv)return;
+  await fbSet('master_invites',inviteId,{status:'cancelled'});
+  PENDING_INVITES=PENDING_INVITES.filter(i=>i.id!==inviteId);
+  showToast('Приглашение отозвано');
   renderMasterList();
 }
 async function removeMaster(id){

@@ -340,8 +340,13 @@ async function findMySalon(phone){
     showScreen('s-nosalón');
     return;
   }
-  const svcDoc=await fbGet('salon_services',BIZ.id);
-  SERVICES=svcDoc?.services||[];
+  // Load per-master services first, fallback to global salon_services
+  if(MY_MASTER.services&&MY_MASTER.services.length){
+    SERVICES=MY_MASTER.services;
+  } else {
+    const svcDoc=await fbGet('salon_services',BIZ.id);
+    SERVICES=svcDoc?.services||[];
+  }
   const _bkRaw=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id]);
   BOOKINGS=_bkRaw; // keep all statuses
   g('mst-name').textContent=MY_MASTER.name||USER.firstName;
@@ -351,10 +356,10 @@ async function findMySalon(phone){
   showScreen('s-sched');
 }
 
-function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
+function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,15000);}
 
 // ── REAL-TIME SYNC ──
-let _syncInt=null,_lastBkHash='';
+let _syncInt=null,_lastBkHash='',_lastMstHash='';
 function _hashBk(arr){return arr.map(x=>x.id+'|'+(x.status||'')).sort().join(',');}
 function startSync(){
   if(_syncInt)clearInterval(_syncInt);
@@ -363,11 +368,18 @@ function startSync(){
     try{
       const fresh=await fbQuery('bookings',['bizId','==',BIZ.id],['masterId','==',MY_MASTER.id]);
       const h=_hashBk(fresh);
-      if(h===_lastBkHash)return;
-      _lastBkHash=h;BOOKINGS=fresh;
+      const bkChanged=h!==_lastBkHash;
+      if(bkChanged){_lastBkHash=h;BOOKINGS=fresh;}
+      // Sync master's services in case admin updated them
+      const mstDoc=await fbGet('salon_masters',BIZ.id);
+      const masters=mstDoc?.masters||[];
+      const me=masters.find(m=>m.id===MY_MASTER.id);
+      const mH=JSON.stringify(me?.services||[]);
+      const mstChanged=mH!==_lastMstHash;
+      if(mstChanged&&me){_lastMstHash=mH;MY_MASTER=me;SERVICES=me.services&&me.services.length?me.services:SERVICES;}
+      if(bkChanged&&curTab==='sched'){renderFilters();renderCalStrip();renderSchedList();}
     }catch{return;}
-    if(curTab==='sched'){renderFilters();renderCalStrip();renderSchedList();}
-  },3000);
+  },5000);
 }
 
 let curTab='sched';
@@ -424,7 +436,7 @@ function renderSchedList(){
 }
 
 function apptCard(b){
-  const[h,m]=b.time.split(':').map(Number);const em=h*60+m+(b.dur||60);
+  const[h,m]=b.time.split(':').map(Number);const em=h*60+m+(MY_MASTER?.slotInterval||60);
   const eh=String(Math.floor(em/60)).padStart(2,'0');const emm=String(em%60).padStart(2,'0');
   return `<div class="appt-slot" onclick="openBkDetail('${b.id}')">
     <div class="appt-time"><div class="appt-t1">${b.time}</div><div class="appt-t2">${eh}:${emm}</div></div>
@@ -437,7 +449,7 @@ function apptCard(b){
         ${b.clientPhone?`<span style="font-size:11px;color:var(--text3)">${esc(b.clientPhone)}</span>`:''}
       </div>
     </div>
-    <div class="appt-r"><div class="appt-price">${fm(b.price)}₸</div><div style="font-family:var(--mono);font-size:11px;color:var(--text3)">${b.dur||60}мин</div></div>
+    <div class="appt-r"><div class="appt-price">${fm(b.price)}₸</div></div>
   </div>`;
 }
 
@@ -447,7 +459,7 @@ async function openBkDetail(id){
     <div class="bconf">
       <div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Клиент</div><div class="bc-val">${esc(b.clientName)}</div><div style="font-size:12px;color:var(--text2)">${esc(b.clientPhone||'')}</div></div></div>
       <div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">${esc(b.serviceName)}</div></div></div>
-      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(b.date)}, ${b.time} (${b.dur}мин)</div></div></div>
+      <div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">${fmDate(b.date)}, ${b.time}</div></div></div>
       <div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">${fm(b.price)}₸</div></div></div>
     </div>
     <div style="margin-bottom:16px"><span class="badge ${STATUS_C[b.status]||'bd-wait'}" style="font-size:13px">${STATUS_L[b.status]||b.status}</span></div>
@@ -548,9 +560,13 @@ function nbNextClient(){
   nbStep=1;renderNb();
 }
 function renderNbSvc(){
+  if(!SERVICES.length){
+    g('nb-body').innerHTML=`<div class="empty"><div class="empty-ico">💎</div><div class="empty-txt">Услуги не настроены. Попросите администратора добавить услуги для вашего профиля.</div></div>`;
+    return;
+  }
   g('nb-body').innerHTML=SERVICES.map(s=>`<div class="svc-item${nbData.service?.id===s.id?' sel':''}" onclick="nbSelSvc('${s.id}')">
     <div class="svc-ico">${CAT_ICONS[s.cat]||'✦'}</div>
-    <div class="svc-info"><div class="svc-name">${esc(s.name)}</div><div class="svc-dur">${s.dur}мин</div></div>
+    <div class="svc-info"><div class="svc-name">${esc(s.name)}</div></div>
     <div class="svc-price">${fm(s.price)}₸</div>
   </div>`).join('');
 }
@@ -607,7 +623,7 @@ async function saveNewBooking(){
     masterId:MY_MASTER.id,masterName:MY_MASTER.name,masterUid:MY_MASTER.uid||UID,
     adminUid:BIZ.ownerId||'',
     serviceId:nbData.service.id,serviceName:nbData.service.name,
-    price:nbData.service.price,dur:nbData.service.dur,
+    price:nbData.service.price,
     date:nbData.date,time:nbData.time,status:'confirmed',note:nbData.client.note||'',
     createdAt:new Date().toISOString(),createdBy:'master'};
   await fbSet('bookings',id,bk);
@@ -656,8 +672,12 @@ async function acceptInvite(id){
   await fbSet('master_invites',id,{status:'accepted'});
   const mstDoc=await fbGet('salon_masters',inv.bizId);
   const masters=mstDoc?.masters||[];
-  const newMaster={id:'m_'+UID,bizId:inv.bizId,uid:UID,phone:USER.phone||LINK?.phone||'',name:inv.name||USER.firstName,spec:inv.spec||'',open:inv.open||'09:00',close:inv.close||'19:00',workDays:inv.workDays||[1,2,3,4,5],slotInterval:inv.slotInterval||30,color:masters.length%6};
-  masters.push(newMaster);
+  const phone=USER.phone||LINK?.phone||'';
+  // Prevent duplicate: update existing entry if already present
+  const existIdx=masters.findIndex(m=>m.uid===UID||m.phone===phone);
+  const masterId=existIdx>=0?masters[existIdx].id:('m_'+UID);
+  const newMaster={id:masterId,bizId:inv.bizId,uid:UID,phone,name:inv.name||USER.firstName,spec:inv.spec||'',open:inv.open||'09:00',close:inv.close||'19:00',workDays:inv.workDays||[1,2,3,4,5],slotInterval:inv.slotInterval||30,color:existIdx>=0?masters[existIdx].color:(masters.length%6)};
+  if(existIdx>=0)masters[existIdx]=newMaster;else masters.push(newMaster);
   await fbSet('salon_masters',inv.bizId,{masters});
   await fbSet('users',UID,{salonId:inv.bizId,role:'master'});
   closeModal('m-invite');

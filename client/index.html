@@ -345,6 +345,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       <div class="hdr-n">Каталог салонов</div>
     </div>
     <div class="hdr-r">
+      <button class="btn-ghost" style="position:relative;background:none;border:none;font-size:22px;cursor:pointer;padding:4px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%" onclick="openNotifs()">🔔<span id="notif-badge" style="display:none;position:absolute;top:0;right:0;background:var(--rose);width:8px;height:8px;border-radius:50%;border:2px solid var(--bg)"></span></button>
       <div class="avatar" id="cli-av" onclick="showTab('profile')">К</div>
     </div>
   </div>
@@ -416,6 +417,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <div class="modal-pill"></div>
     <div class="modal-title">Запись</div>
     <div id="bkdetail-body"></div>
+  </div>
+</div>
+
+<!-- NOTIFICATIONS MODAL -->
+<div class="modal" id="m-notifs">
+  <div class="modal-sheet">
+    <div class="modal-pill"></div>
+    <div class="modal-title">Уведомления</div>
+    <div id="notif-list" style="max-height:50vh;overflow-y:auto"></div>
+    <button class="btn btn-out" style="margin-top:12px" onclick="closeModal('m-notifs')">Закрыть</button>
   </div>
 </div>
 
@@ -766,16 +777,80 @@ async function writeNotif(recipientUid, recipientRole, text, type, bookingId) {
 
 // ── REAL-TIME REFRESH (my bookings) ──
 var _myBkTimer = null;
+var _myBkHash  = '';
+var _notifHash = '';
+var _remindedBks = {}; // { bookingId: true } — prevent double-reminder
 function startMyBkSync() {
   if (_myBkTimer) return;
+  // Restore reminded bookings from localStorage
+  try { _remindedBks = JSON.parse(localStorage.getItem('zap_reminded') || '{}'); } catch(e) {}
   _myBkTimer = setInterval(async function() {
-    var el = document.getElementById('mybk-list');
-    var sc = document.getElementById('s-mybookings');
-    if (!el || !sc || !sc.classList.contains('active')) return;
     if (!UID) return;
+    // ── Bookings refresh ──────────────────────────────────────────
     var fresh = await fbQuery('bookings', ['clientId','==',UID]);
-    renderMyBookingsData(fresh);
+    var h = fresh.map(function(x) { return x.id + '|' + (x.status || ''); }).sort().join(',');
+    if (h !== _myBkHash) {
+      _myBkHash = h;
+      var el = document.getElementById('mybk-list');
+      var sc = document.getElementById('s-mybookings');
+      if (el && sc && sc.classList.contains('active')) renderMyBookingsData(fresh);
+    }
+    // ── 1-hour reminder ───────────────────────────────────────────
+    var now = new Date();
+    var nowMs = now.getTime();
+    fresh.forEach(function(bk) {
+      if (bk.status === 'cancelled' || bk.status === 'done') return;
+      if (_remindedBks[bk.id]) return;
+      if (!bk.date || !bk.time) return;
+      var bkMs = new Date(bk.date + 'T' + bk.time + ':00').getTime();
+      var diff = bkMs - nowMs; // ms until booking
+      if (diff >= 55*60*1000 && diff <= 75*60*1000) {
+        // Within 55–75 min — send reminder notification
+        writeNotif(UID, 'client',
+          '⏰ Напоминание: через час запись — ' + (bk.serviceName || '') +
+          ' у ' + (bk.masterName || '') + ' в ' + (bk.salonName || '') +
+          ' в ' + bk.time,
+          'reminder', bk.id);
+        _remindedBks[bk.id] = true;
+        try { localStorage.setItem('zap_reminded', JSON.stringify(_remindedBks)); } catch(e) {}
+        showToast('⏰ Напоминание: через час — ' + (bk.serviceName || ''), 's');
+      }
+    });
+    // ── Notifications refresh ─────────────────────────────────────
+    var notifs = await fbQuery('notifications', ['recipientUid','==',UID]);
+    var nh = notifs.map(function(n) { return n.id; }).sort().join(',');
+    if (nh !== _notifHash) {
+      _notifHash = nh;
+      // Count unread (notifs without readAt)
+      var unread = notifs.filter(function(n) { return !n.readAt; });
+      var badge = document.getElementById('notif-badge');
+      if (badge) badge.style.display = unread.length > 0 ? 'block' : 'none';
+      // Store for display
+      window._NOTIFS = notifs;
+    }
   }, 5000);
+}
+function openNotifs() {
+  var notifs = window._NOTIFS || [];
+  var el = document.getElementById('notif-list');
+  if (!el) return;
+  // Mark all as read
+  notifs.forEach(function(n) {
+    if (!n.readAt) {
+      fbSet('notifications', n.id, {readAt: new Date().toISOString()});
+      n.readAt = new Date().toISOString();
+    }
+  });
+  var badge = document.getElementById('notif-badge');
+  if (badge) badge.style.display = 'none';
+  var sorted = notifs.slice().sort(function(a,b) { return (b.createdAt||'').localeCompare(a.createdAt||''); });
+  el.innerHTML = sorted.length ? sorted.map(function(n) {
+    return '<div style="background:var(--bg3);border-radius:var(--rsm);padding:12px 14px;margin-bottom:8px">' +
+      '<div style="font-size:13px;line-height:1.5">' + esc(n.text) + '</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:5px">' + (n.createdAt ? new Date(n.createdAt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '') + '</div>' +
+    '</div>';
+  }).join('') : '<div class="empty"><div class="empty-ico">🔔</div><div class="empty-txt">Уведомлений пока нет</div></div>';
+  openModal('m-notifs');
 }
 
 // ── FAVOURITES ──
@@ -938,8 +1013,21 @@ async function openSalon(id) {
   ]);
   var svcDoc  = docs[0];
   var mastDoc = docs[1];
-  curServices = (svcDoc  && svcDoc.services) ? svcDoc.services   : [];
-  curMasters  = (mastDoc && mastDoc.masters)  ? mastDoc.masters  : [];
+  curMasters  = (mastDoc && mastDoc.masters) ? mastDoc.masters : [];
+
+  // Build services from masters (per-master services take priority)
+  var allSvcs = [], seenIds = {};
+  curMasters.forEach(function(m) {
+    (m.services || []).forEach(function(s) {
+      if (!seenIds[s.id]) {
+        seenIds[s.id] = true;
+        allSvcs.push(Object.assign({}, s, {_masterId: m.id}));
+      }
+    });
+  });
+  // Fallback to global salon_services if masters have no services
+  if (!allSvcs.length) allSvcs = (svcDoc && svcDoc.services) ? svcDoc.services : [];
+  curServices = allSvcs;
 
   var open = isOpen(curSalon.open || '00:00', curSalon.close || '23:59');
   var html = '<div style="height:160px;display:flex;align-items:center;justify-content:center;font-size:60px;' + (curSalon.cover || 'background:var(--bg4)') + ';position:relative;overflow:hidden">' +
@@ -980,7 +1068,7 @@ async function openSalon(id) {
   html += curServices.map(function(svc) {
     return '<div class="svc-item" onclick="startBooking(\'' + svc.id + '\')">' +
       '<div class="svc-ico">' + (CAT_ICONS[svc.cat] || '✦') + '</div>' +
-      '<div class="svc-info"><div class="svc-name">' + esc(svc.name) + '</div><div class="svc-dur">' + svc.dur + ' мин</div></div>' +
+      '<div class="svc-info"><div class="svc-name">' + esc(svc.name) + '</div></div>' +
       '<div class="svc-price">' + fm(svc.price) + '₸</div>' +
     '</div>';
   }).join('');
@@ -1026,7 +1114,7 @@ function renderWizServices() {
   g('wiz-body').innerHTML = curServices.map(function(s) {
     return '<div class="svc-item' + (wiz.service && wiz.service.id === s.id ? ' sel' : '') + '" onclick="selService(\'' + s.id + '\')">' +
       '<div class="svc-ico">' + (CAT_ICONS[s.cat] || '✦') + '</div>' +
-      '<div class="svc-info"><div class="svc-name">' + esc(s.name) + '</div><div class="svc-dur">' + s.dur + ' мин</div></div>' +
+      '<div class="svc-info"><div class="svc-name">' + esc(s.name) + '</div></div>' +
       '<div class="svc-price">' + fm(s.price) + '₸</div>' +
     '</div>';
   }).join('');
@@ -1040,12 +1128,25 @@ function selService(id) {
 }
 
 function renderWizMasters() {
-  g('wiz-body').innerHTML = curMasters.map(function(m, i) {
+  // Filter to masters who offer the selected service (if per-master services exist)
+  var avail = curMasters;
+  if (wiz.service && wiz.service._masterId) {
+    var filtered = curMasters.filter(function(m) {
+      return (m.services || []).some(function(s) { return s.id === wiz.service.id; });
+    });
+    if (filtered.length) avail = filtered;
+  }
+  if (!avail.length) {
+    g('wiz-body').innerHTML = '<div class="empty"><div class="empty-ico">👩‍💼</div><div class="empty-txt">Нет доступных мастеров</div></div>';
+    return;
+  }
+  g('wiz-body').innerHTML = avail.map(function(m, i) {
+    var idx = curMasters.indexOf(m);
     return '<div class="master-opt' + (wiz.master && wiz.master.id === m.id ? ' sel' : '') + '" onclick="selMaster(\'' + m.id + '\')">' +
-      '<div class="master-av" style="background:' + AV_COLS[i % AV_COLS.length] + '">' + avLetter(m.name) + '</div>' +
+      '<div class="master-av" style="background:' + AV_COLS[(idx >= 0 ? idx : i) % AV_COLS.length] + '">' + avLetter(m.name) + '</div>' +
       '<div class="master-info">' +
         '<div class="master-name">' + esc(m.name) + '</div>' +
-        '<div class="master-spec">' + esc(m.spec || '') + ' · ' + (m.open || '09:00') + '–' + (m.close || '19:00') + '</div>' +
+        '<div class="master-spec">' + esc(m.spec || '') + (m.open ? ' · ' + m.open + '–' + (m.close || '19:00') : '') + '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -1094,57 +1195,56 @@ function selDate(ds) {
 async function renderWizTime() {
   g('wiz-body').innerHTML = '<div class="spin-center"><div class="spinner"></div></div>';
   var master = wiz.master;
-  var dur    = (wiz.service && wiz.service.dur) ? wiz.service.dur : 60;
-
-  var existing = [];
-  try {
-    existing = await fbQuery('bookings',
-      ['bizId','==',curSalonId],
-      ['masterId','==', master ? master.id : 'm0'],
-      ['date','==',wiz.date],
-      ['status','!=','cancelled']
-    );
-  } catch(e) {}
 
   if (wiz.date < todayStr()) {
     g('wiz-body').innerHTML = '<div class="empty"><div class="empty-ico">📅</div><div class="empty-txt">Эта дата уже прошла</div></div>';
     return;
   }
 
-  var open   = (master && master.open)   || (curSalon && curSalon.open)   || '09:00';
-  var close  = (master && master.close)  || (curSalon && curSalon.close)  || '19:00';
-  var slots  = calcSlots(open, close, dur, existing);
+  var existing = [];
+  try {
+    // Fetch without != operator (causes index issues), filter cancelled in JS
+    var raw = await fbQuery('bookings',
+      ['bizId','==',curSalonId],
+      ['masterId','==', master ? master.id : 'm0'],
+      ['date','==',wiz.date]
+    );
+    existing = raw.filter(function(b) { return b.status !== 'cancelled'; });
+  } catch(e) {}
+
+  var open  = (master && master.open)  || (curSalon && curSalon.open)  || '09:00';
+  var close = (master && master.close) || (curSalon && curSalon.close) || '19:00';
+  var slots = calcSlots(open, close, existing, master);
   var freeSlots = slots.filter(function(s) { return !s.busy; });
 
   g('wiz-body').innerHTML =
     '<div style="font-size:13px;color:var(--text2);margin-bottom:12px">' + fmDate(wiz.date) + '</div>' +
     '<div class="time-grid">' +
     slots.map(function(s) {
-      return '<div class="ts' + (s.busy ? ' busy' : '') + (wiz.time === s.time ? ' on' : '') + '" onclick="selTime(\'' + s.time + '\')">' + s.time + '</div>';
+      return '<div class="ts' + (s.busy ? ' busy' : '') + (wiz.time === s.time ? ' on' : '') + '" onclick="' + (s.busy ? '' : "selTime('" + s.time + "')") + '">' + s.time + '</div>';
     }).join('') +
     '</div>' +
     (!freeSlots.length ? '<div class="empty"><div class="empty-ico">😔</div><div class="empty-txt">На этот день все записи заняты</div></div>' : '');
 }
 
-function calcSlots(open, close, dur, existing) {
-  var op  = (open  || '09:00').split(':').map(Number);
-  var cl  = (close || '19:00').split(':').map(Number);
-  var cur = op[0] * 60 + op[1];
-  var end = cl[0] * 60 + cl[1];
-  var slots = [];
-  while (cur + dur <= end) {
+// calcSlots: uses master's slotInterval, exact time match (like admin), past-time filter
+function calcSlots(open, close, existing, master) {
+  var step   = (master && master.slotInterval) ? Number(master.slotInterval) : 60;
+  var op     = (open  || '09:00').split(':').map(Number);
+  var cl     = (close || '19:00').split(':').map(Number);
+  var cur    = op[0] * 60 + op[1];
+  var end    = cl[0] * 60 + cl[1];
+  var now    = new Date();
+  var nowMin = (wiz.date === todayStr()) ? now.getHours() * 60 + now.getMinutes() : -1;
+  var slots  = [];
+  while (cur < end) {
     var h    = String(Math.floor(cur / 60)).padStart(2, '0');
     var m    = String(cur % 60).padStart(2, '0');
     var time = h + ':' + m;
-    var busy = existing.some(function(b) {
-      if (!b.time) return false;
-      var bp  = b.time.split(':').map(Number);
-      var bs  = bp[0] * 60 + bp[1];
-      var be  = bs + (b.dur || 60);
-      return cur < be && cur + dur > bs;
-    });
-    slots.push({time: time, busy: busy});
-    cur += 30;
+    var isPast = cur <= nowMin;
+    var isBusy = existing.some(function(b) { return b.time === time; });
+    slots.push({time: time, busy: isPast || isBusy});
+    cur += step;
   }
   return slots;
 }
@@ -1162,7 +1262,7 @@ function renderWizConfirm() {
       '<div class="bc-row"><div class="bc-ico">💎</div><div><div class="bc-lbl">Услуга</div><div class="bc-val">'   + esc(wiz.service && wiz.service.name)            + '</div></div></div>' +
       '<div class="bc-row"><div class="bc-ico">👤</div><div><div class="bc-lbl">Мастер</div><div class="bc-val">'   + esc((wiz.master && wiz.master.name) || 'Любой') + '</div></div></div>' +
       '<div class="bc-row"><div class="bc-ico">📅</div><div><div class="bc-lbl">Дата и время</div><div class="bc-val">' + fmDate(wiz.date) + ', ' + wiz.time         + '</div></div></div>' +
-      '<div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">'   + fm(wiz.service && wiz.service.price) + '₸ · ' + (wiz.service && wiz.service.dur) + ' мин</div></div></div>' +
+      '<div class="bc-row"><div class="bc-ico">💰</div><div><div class="bc-lbl">Стоимость</div><div class="bc-val">'   + fm(wiz.service && wiz.service.price) + '₸</div></div></div>' +
     '</div>' +
     '<button class="btn btn-acc" onclick="confirmBooking()">Подтвердить запись</button>' +
     '<button class="btn btn-out" style="margin-top:8px" onclick="showScreen(\'s-salon\')">Отмена</button>';
@@ -1217,7 +1317,6 @@ async function confirmBooking() {
     serviceId:   wiz.service.id,
     serviceName: wiz.service.name,
     price:       wiz.service.price,
-    dur:         wiz.service.dur,
     date:        wiz.date,
     time:        wiz.time,
     status:      'pending',
