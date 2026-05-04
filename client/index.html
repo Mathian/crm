@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Zap is...</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+const cfg={apiKey:"AIzaSyD6wnCYIGciW_VRujcxlis7HEgGfWC6vOA",authDomain:"telegram-crm-85b05.firebaseapp.com",projectId:"telegram-crm-85b05",storageBucket:"telegram-crm-85b05.firebasestorage.app",messagingSenderId:"499866542692",appId:"1:499866542692:web:88eafe1e886c50bff03571"};
+try{
+  const app=initializeApp(cfg,'client-rt');
+  const db=getFirestore(app);
+  const auth=getAuth(app);
+  signInAnonymously(auth).catch(()=>{});
+  window._RTFB={db,collection,query,where,onSnapshot};
+}catch(e){window._RTFB=null;}
+window.dispatchEvent(new Event('rtReady'));
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -92,16 +106,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   color:var(--text2);background:none;border:none;cursor:pointer;padding:4px 0}
 
 /* SCROLL */
-.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px+env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+.scroll{flex:1;overflow-y:auto;padding:16px 20px 24px;-webkit-overflow-scrolling:touch}
 .scroll::-webkit-scrollbar{display:none}
 .scroll-full{flex:1;overflow-y:auto;padding:16px 20px 32px;-webkit-overflow-scrolling:touch}
 .scroll-full::-webkit-scrollbar{display:none}
 
 /* BOTTOM NAV */
-.bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nav);
+.bnav{height:calc(var(--nav) + env(safe-area-inset-bottom));flex-shrink:0;
   background:rgba(14,14,18,.93);backdrop-filter:blur(20px);
   border-top:1px solid var(--border);display:flex;align-items:center;
-  padding:0 4px;padding-bottom:env(safe-area-inset-bottom);z-index:100}
+  padding:0 4px;padding-bottom:env(safe-area-inset-bottom);z-index:10}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:4px;padding:8px 4px;cursor:pointer;border:none;background:none;position:relative;
   border-radius:var(--rsm);transition:all var(--ease)}
@@ -418,7 +432,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <!-- PROFILE -->
 <div class="screen" id="s-profile">
   <div class="mhdr"><div class="hdr-n">Профиль</div></div>
-  <div class="scroll-full" style="padding-bottom:calc(var(--nav)+16px+env(safe-area-inset-bottom))">
+  <div class="scroll-full" style="padding-bottom:24px">
     <div id="prof-body"></div>
   </div>
   <div class="bnav">
@@ -787,7 +801,9 @@ async function boot() {
     renderCatalog();
     showScreen('s-catalog');
     startHeartbeat();
-    startMyBkSync();
+    // Start real-time sync — wait for RT module if not ready yet
+    if (window._RTFB) { startMyBkSync(); }
+    else { window.addEventListener('rtReady', function() { startMyBkSync(); }, {once:true}); }
   } catch(e) {
     try { renderCatalog(); } catch(e2) {}
     showScreen(UID ? 's-catalog' : 's-nouid');
@@ -814,60 +830,66 @@ async function writeNotif(recipientUid, recipientRole, text, type, bookingId) {
   });
 }
 
-// ── REAL-TIME REFRESH (my bookings) ──
-var _myBkTimer = null;
+// ── REAL-TIME REFRESH (onSnapshot — zero-poll, instant push) ──
 var _myBkHash  = '';
 var _notifHash = '';
-var _remindedBks = {}; // { bookingId: true } — prevent double-reminder
+var _remindedBks = {};
+var _unsubMyBk = null, _unsubNotifs = null;
+var _latestBks = []; // kept for reminder checker
+
 function startMyBkSync() {
-  if (_myBkTimer) return;
-  // Restore reminded bookings from localStorage
   try { _remindedBks = JSON.parse(localStorage.getItem('zap_reminded') || '{}'); } catch(e) {}
-  _myBkTimer = setInterval(async function() {
-    if (!UID) return;
-    // ── Bookings refresh ──────────────────────────────────────────
-    var fresh = await fbQuery('bookings', ['clientId','==',UID]);
+  if (!window._RTFB || !UID) return;
+  var RT = window._RTFB;
+
+  // ── Watch my bookings ────────────────────────────────────────────
+  if (_unsubMyBk) { _unsubMyBk(); _unsubMyBk = null; }
+  var bkQ = RT.query(RT.collection(RT.db, 'bookings'), RT.where('clientId', '==', UID));
+  _unsubMyBk = RT.onSnapshot(bkQ, function(snap) {
+    var fresh = snap.docs.map(function(d) { return Object.assign({id: d.id}, d.data()); });
+    _latestBks = fresh;
     var h = fresh.map(function(x) { return x.id + '|' + (x.status || ''); }).sort().join(',');
-    if (h !== _myBkHash) {
-      _myBkHash = h;
-      var el = document.getElementById('mybk-list');
-      var sc = document.getElementById('s-mybookings');
-      if (el && sc && sc.classList.contains('active')) renderMyBookingsData(fresh);
-    }
-    // ── 1-hour reminder ───────────────────────────────────────────
-    var now = new Date();
-    var nowMs = now.getTime();
-    fresh.forEach(function(bk) {
+    if (h === _myBkHash) return;
+    _myBkHash = h;
+    var el = document.getElementById('mybk-list');
+    var sc = document.getElementById('s-mybookings');
+    if (el && sc && sc.classList.contains('active')) renderMyBookingsData(fresh);
+  });
+
+  // ── Watch notifications ──────────────────────────────────────────
+  if (_unsubNotifs) { _unsubNotifs(); _unsubNotifs = null; }
+  var nfQ = RT.query(RT.collection(RT.db, 'notifications'), RT.where('recipientUid', '==', UID));
+  _unsubNotifs = RT.onSnapshot(nfQ, function(snap) {
+    var notifs = snap.docs.map(function(d) { return Object.assign({id: d.id}, d.data()); });
+    var nh = notifs.map(function(n) { return n.id; }).sort().join(',');
+    if (nh === _notifHash) return;
+    _notifHash = nh;
+    var unread = notifs.filter(function(n) { return !n.readAt; });
+    var badge = document.getElementById('notif-badge');
+    if (badge) badge.style.display = unread.length > 0 ? 'block' : 'none';
+    window._NOTIFS = notifs;
+  });
+
+  // ── 1-hour reminder (still needs a timer, independent of data changes) ──
+  setInterval(function() {
+    var nowMs = Date.now();
+    (_latestBks || []).forEach(function(bk) {
       if (bk.status === 'cancelled' || bk.status === 'done') return;
       if (_remindedBks[bk.id]) return;
       if (!bk.date || !bk.time) return;
       var bkMs = new Date(bk.date + 'T' + bk.time + ':00').getTime();
-      var diff = bkMs - nowMs; // ms until booking
+      var diff = bkMs - nowMs;
       if (diff >= 55*60*1000 && diff <= 75*60*1000) {
-        // Within 55–75 min — send reminder notification
         writeNotif(UID, 'client',
           '⏰ Напоминание: через час запись — ' + (bk.serviceName || '') +
-          ' у ' + (bk.masterName || '') + ' в ' + (bk.salonName || '') +
-          ' в ' + bk.time,
+          ' у ' + (bk.masterName || '') + ' в ' + (bk.salonName || '') + ' в ' + bk.time,
           'reminder', bk.id);
         _remindedBks[bk.id] = true;
         try { localStorage.setItem('zap_reminded', JSON.stringify(_remindedBks)); } catch(e) {}
         showToast('⏰ Напоминание: через час — ' + (bk.serviceName || ''), 's');
       }
     });
-    // ── Notifications refresh ─────────────────────────────────────
-    var notifs = await fbQuery('notifications', ['recipientUid','==',UID]);
-    var nh = notifs.map(function(n) { return n.id; }).sort().join(',');
-    if (nh !== _notifHash) {
-      _notifHash = nh;
-      // Count unread (notifs without readAt)
-      var unread = notifs.filter(function(n) { return !n.readAt; });
-      var badge = document.getElementById('notif-badge');
-      if (badge) badge.style.display = unread.length > 0 ? 'block' : 'none';
-      // Store for display
-      window._NOTIFS = notifs;
-    }
-  }, 5000);
+  }, 60000); // check every minute — reminders don't need to be instant
 }
 function openNotifs() {
   var notifs = window._NOTIFS || [];

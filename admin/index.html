@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, orderBy, deleteDoc }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, orderBy, deleteDoc, onSnapshot }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 const cfg = {
@@ -24,7 +24,7 @@ try {
   const app = initializeApp(cfg);
   const db = getFirestore(app);
   const auth = getAuth(app);
-  window._FB = { db, auth, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, orderBy, deleteDoc, signInAnonymously };
+  window._FB = { db, auth, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, orderBy, deleteDoc, onSnapshot, signInAnonymously };
   window._fbReady = true;
 } catch(e) { window._fbReady = false; }
 window.dispatchEvent(new Event('fbReady'));
@@ -109,14 +109,14 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   background:linear-gradient(135deg,#a855f7,#7c3aed)}
 .back-btn{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;
   color:var(--text2);background:none;border:none;cursor:pointer;padding:4px 0}
-.scroll{flex:1;overflow-y:auto;padding:16px 20px;padding-bottom:calc(var(--nav)+16px+env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+.scroll{flex:1;overflow-y:auto;padding:16px 20px 24px;-webkit-overflow-scrolling:touch}
 .scroll::-webkit-scrollbar{display:none}
 .scroll-full{flex:1;overflow-y:auto;padding:16px 20px 32px;-webkit-overflow-scrolling:touch}
 .scroll-full::-webkit-scrollbar{display:none}
-.bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nav);
+.bnav{height:calc(var(--nav) + env(safe-area-inset-bottom));flex-shrink:0;
   background:rgba(14,14,18,.93);backdrop-filter:blur(20px);
   border-top:1px solid var(--border);display:flex;align-items:center;
-  padding:0 4px;padding-bottom:env(safe-area-inset-bottom);z-index:100}
+  padding:0 4px;padding-bottom:env(safe-area-inset-bottom);z-index:10}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:4px;padding:8px 4px;cursor:pointer;border:none;background:none;position:relative;
   border-radius:var(--rsm);transition:all var(--ease)}
@@ -433,7 +433,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 
 <!-- PROFILE -->
 <div class="screen" id="s-prof">
-  <div class="scroll-full" style="padding-top:16px;padding-bottom:calc(var(--nav)+16px+env(safe-area-inset-bottom))">
+  <div class="scroll-full" style="padding-top:16px;padding-bottom:24px">
     <div id="prof-body"></div>
   </div>
   <div class="bnav">
@@ -797,36 +797,34 @@ async function boot(){
   }
 }
 
-function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,5000);}
+function startHeartbeat(){const send=()=>{if(UID)fbSet('users',UID,{webAppLastSeen:new Date().toISOString()});};send();setInterval(send,30000);}
 
-// ── REAL-TIME SYNC ──
-let _syncInt=null,_lastBkHash='',_lastCliHash='',_lastInvHash='';
-function _hashBk(arr){return arr.map(x=>x.id+'|'+(x.status||'')).sort().join(',');}
+// ── REAL-TIME SYNC (onSnapshot — zero-poll, instant push) ──
+let _unsubBk=null,_unsubCli=null,_unsubInv=null;
 function startSync(){
-  if(_syncInt)clearInterval(_syncInt);
-  _syncInt=setInterval(async()=>{
-    if(!BIZ)return;
-    try{
-      const fresh=await fbQuery('bookings',['bizId','==',BIZ.id]);
-      const bkH=_hashBk(fresh);
-      const bkChanged=bkH!==_lastBkHash;
-      if(bkChanged){BOOKINGS=fresh;_lastBkHash=bkH;}
-      const cli=await fbQuery('salon_clients',['bizId','==',BIZ.id]);
-      const cliH=_hashBk(cli);
-      const cliChanged=cliH!==_lastCliHash;
-      if(cliChanged){CLIENTS=cli;_lastCliHash=cliH;}
-      const invs=await fbQuery('master_invites',['bizId','==',BIZ.id],['status','==','pending']);
-      const invH=_hashBk(invs);
-      const invChanged=invH!==_lastInvHash;
-      if(invChanged){PENDING_INVITES=invs;_lastInvHash=invH;}
-      if(bkChanged||cliChanged){
-        if(curTab==='dash')renderDash();
-        else if(curTab==='sched'){renderMasterFilter();renderSchedList();}
-        else if(curTab==='clients')renderClients();
-      }
-      if(invChanged&&curTab==='svcs')renderMasterList();
-    }catch{}
-  },5000);
+  if(_unsubBk){_unsubBk();_unsubBk=null;}
+  if(_unsubCli){_unsubCli();_unsubCli=null;}
+  if(_unsubInv){_unsubInv();_unsubInv=null;}
+  if(!FB||!BIZ)return;
+  // Bookings
+  const bkQ=FB.query(FB.collection(FB.db,'bookings'),FB.where('bizId','==',BIZ.id));
+  _unsubBk=FB.onSnapshot(bkQ,snap=>{
+    BOOKINGS=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(curTab==='dash')renderDash();
+    else if(curTab==='sched'){renderMasterFilter();renderSchedList();}
+  },e=>console.warn('bk:',e));
+  // Clients
+  const cliQ=FB.query(FB.collection(FB.db,'salon_clients'),FB.where('bizId','==',BIZ.id));
+  _unsubCli=FB.onSnapshot(cliQ,snap=>{
+    CLIENTS=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(curTab==='clients')renderClients();
+  },e=>console.warn('cli:',e));
+  // Pending invites
+  const invQ=FB.query(FB.collection(FB.db,'master_invites'),FB.where('bizId','==',BIZ.id),FB.where('status','==','pending'));
+  _unsubInv=FB.onSnapshot(invQ,snap=>{
+    PENDING_INVITES=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(curTab==='svcs')renderMasterList();
+  },e=>console.warn('inv:',e));
 }
 
 // ── BTYPE GRID ──
@@ -864,13 +862,17 @@ async function createSalon(){
 // ── LOAD DATA ──
 let PENDING_INVITES=[];
 async function loadData(){
-  const svcDoc=await fbGet('salon_services',BIZ.id);
-  const mstDoc=await fbGet('salon_masters',BIZ.id);
+  const [svcDoc,mstDoc,bks,clis,invs]=await Promise.all([
+    fbGet('salon_services',BIZ.id),
+    fbGet('salon_masters',BIZ.id),
+    fbQuery('bookings',['bizId','==',BIZ.id]),
+    fbQuery('salon_clients',['bizId','==',BIZ.id]),
+    fbQuery('master_invites',['bizId','==',BIZ.id],['status','==','pending'])
+  ]);
   SERVICES=svcDoc?.services||[];
   MASTERS=mstDoc?.masters||[];
-  BOOKINGS=await fbQuery('bookings',['bizId','==',BIZ.id]);
-  CLIENTS=await fbQuery('salon_clients',['bizId','==',BIZ.id]);
-  PENDING_INVITES=await fbQuery('master_invites',['bizId','==',BIZ.id],['status','==','pending']);
+  BOOKINGS=bks; CLIENTS=clis; PENDING_INVITES=invs;
+  // startSync() will take over with onSnapshot for subsequent updates
 }
 
 // ── TABS ──
