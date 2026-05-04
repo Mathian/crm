@@ -7,7 +7,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, query, where, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 const cfg={apiKey:"AIzaSyD6wnCYIGciW_VRujcxlis7HEgGfWC6vOA",authDomain:"telegram-crm-85b05.firebaseapp.com",projectId:"telegram-crm-85b05",storageBucket:"telegram-crm-85b05.firebasestorage.app",messagingSenderId:"499866542692",appId:"1:499866542692:web:88eafe1e886c50bff03571"};
 try{
@@ -15,7 +15,7 @@ try{
   const db=getFirestore(app);
   const auth=getAuth(app);
   signInAnonymously(auth).catch(()=>{});
-  window._RTFB={db,collection,query,where,onSnapshot};
+  window._RTFB={db,collection,query,where,onSnapshot,doc,setDoc,deleteDoc,getDocs};
 }catch(e){window._RTFB=null;}
 window.dispatchEvent(new Event('rtReady'));
 </script>
@@ -301,8 +301,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .rv-card-date{font-size:11px;color:var(--text3);margin-top:6px}
 .rv-my-card{background:var(--acc3);border:1px solid rgba(45,212,191,.25)}
 .rv-star-row{display:flex;gap:10px;justify-content:center;margin-bottom:16px}
-.rv-star{font-size:28px;cursor:pointer;opacity:.3;transition:opacity .15s,transform .15s;background:none;border:none;padding:0;line-height:1}
-.rv-star.on{opacity:1;transform:scale(1.15)}
+.rv-star{font-size:28px;cursor:pointer;opacity:.25;transition:all .15s;background:none;border:none;padding:0;line-height:1;color:var(--amber)}
+.rv-star.on{opacity:1;transform:scale(1.18);color:var(--amber)}
 
 /* SPINNER */
 .spin-center{display:flex;align-items:center;justify-content:center;padding:48px}
@@ -1069,10 +1069,20 @@ async function openSalon(id) {
   showScreen('s-salon');
 
   _salonReviews = []; _myReview = null; _canReview = false;
+  // Load reviews via SDK for reliable auth; other data via REST
+  async function loadReviewsSDK(sid) {
+    try {
+      var RT = window._RTFB;
+      if (!RT) return [];
+      var q = RT.query(RT.collection(RT.db, 'reviews'), RT.where('salonId', '==', sid));
+      var snap = await RT.getDocs(q);
+      return snap.docs.map(function(d) { return Object.assign({id: d.id}, d.data()); });
+    } catch(e) { return []; }
+  }
   var docs = await Promise.all([
     fbGet('salon_services', id),
     fbGet('salon_masters', id),
-    fbQuery('reviews', ['salonId','==',id]),
+    loadReviewsSDK(id),
     UID ? fbQuery('bookings', ['clientId','==',UID], ['bizId','==',id]) : Promise.resolve([])
   ]);
   var svcDoc  = docs[0];
@@ -1656,6 +1666,8 @@ function openReviewModal(editing) {
 
 async function saveReview() {
   if (!UID) return;
+  var RT = window._RTFB;
+  if (!RT) { showToast('Ошибка: нет соединения', 'e'); return; }
   var isEdit = !!_myReview;
   var text = g('rv-text').value.trim();
   var docId = curSalonId + '_' + UID;
@@ -1669,7 +1681,13 @@ async function saveReview() {
     updatedAt:  now
   };
   if (!isEdit) data.createdAt = now;
-  await fbSet('reviews', docId, data);
+  try {
+    // Use Firebase SDK setDoc (same auth as onSnapshot — reliable)
+    await RT.setDoc(RT.doc(RT.db, 'reviews', docId), data, {merge: true});
+  } catch(e) {
+    showToast('Ошибка сохранения: ' + (e.code || e.message), 'e');
+    return;
+  }
   if (isEdit) {
     Object.assign(_myReview, data);
   } else {
@@ -1689,8 +1707,12 @@ async function saveReview() {
 function deleteMyReview() {
   tg.showConfirm('Удалить ваш отзыв?', async function(ok) {
     if (!ok) return;
+    var RT = window._RTFB;
     var docId = curSalonId + '_' + UID;
-    await fbDelete('reviews', docId);
+    try {
+      if (RT) await RT.deleteDoc(RT.doc(RT.db, 'reviews', docId));
+      else await fbDelete('reviews', docId);
+    } catch(e) { showToast('Ошибка удаления', 'e'); return; }
     _salonReviews = _salonReviews.filter(function(r) { return r.clientUid !== UID; });
     _myReview = null;
     showToast('Отзыв удалён');
