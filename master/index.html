@@ -167,7 +167,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   <div style="display:flex;flex-direction:column;align-items:center">
     <div class="splash-logo">✂️</div>
     <div class="splash-name">Zap is...</div>
-    <div class="splash-tag">Master Panel</div>
+    <div class="splash-tag"> Panel</div>
     <div class="splash-bar"><div class="splash-prog"></div></div>
   </div>
 </div>
@@ -176,7 +176,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:32px">
     <div style="font-size:56px">🔗</div>
     <div style="font-family:'Playfair Display',serif;font-size:24px;font-weight:600">Войдите через Telegram</div>
-    <div style="font-size:14px;color:var(--text2);line-height:1.6">Откройте бота <b style="color:var(--acc)">@ZapMasterBot</b> и нажмите /start</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6">Откройте бота <b style="color:var(--acc)">@ZapIs_MasterBot</b> и нажмите /start</div>
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px;font-family:var(--mono);font-size:14px;color:var(--acc)">@ZapMasterBot</div>
   </div>
 </div>
@@ -761,7 +761,7 @@ function renderProf(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
       ${['today','week','month'].slice(0,2).map((p,i)=>{const bks=p==='today'?BOOKINGS.filter(b=>b.date===todayStr()):BOOKINGS;const done=bks.filter(b=>b.status==='done');const rev=done.reduce((s,b)=>s+Number(b.price),0);return `<div style="background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:16px"><div style="font-size:11px;color:var(--text2);margin-bottom:6px">${i===0?'Сегодня':'За всё время'}</div><div style="font-family:var(--mono);font-size:24px;font-weight:500">${done.length}</div><div style="font-size:11px;color:var(--acc);margin-top:2px">${i===0?'записей':'завершено'}</div></div>`;}).join('')}
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">Zap is... · by @mathian</div>`;
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">Zap is... · Master Panel · by @mathian</div>`;
 }
 </script>
 </body>
