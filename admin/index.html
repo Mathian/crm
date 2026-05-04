@@ -283,7 +283,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:32px">
     <div style="font-size:56px">🔗</div>
     <div style="font-family:'Playfair Display',serif;font-size:24px;font-weight:600">Войдите через Telegram</div>
-    <div style="font-size:14px;color:var(--text2);line-height:1.6">Откройте бота <b style="color:var(--acc)">@ZapAdminBot</b> и нажмите /start</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6">Откройте бота <b style="color:var(--acc)">@ZapIs_AdminBot</b> и нажмите /start</div>
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px;font-family:var(--mono);font-size:14px;color:var(--acc)">@ZapAdminBot</div>
   </div>
 </div>
@@ -357,7 +357,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       <div class="qa" onclick="openNewBooking()"><div class="qa-ico">➕</div><div class="qa-lbl">Новая запись</div></div>
       <div class="qa" onclick="aTab('sched')"><div class="qa-ico">📆</div><div class="qa-lbl">Расписание</div></div>
       <div class="qa" onclick="aTab('clients')"><div class="qa-ico">👥</div><div class="qa-lbl">Клиенты</div></div>
-      <div class="qa" onclick="aTab('svcs')"><div class="qa-ico">💎</div><div class="qa-lbl">Услуги</div></div>
+      <div class="qa" onclick="aTab('svcs')"><div class="qa-ico">💎</div><div class="qa-lbl">Мастера</div></div>
     </div>
     <div id="a-pending-section"></div>
     <div class="sec-hdr"><div class="sec-t">Сегодня</div><div class="sec-a" onclick="aTab('sched')">Всё →</div></div>
@@ -367,7 +367,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <button class="ni on" id="ani-dash" onclick="aTab('dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
     <button class="ni" id="ani-sched" onclick="aTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span><div class="ni-pip" id="apip-s"></div></button>
     <button class="ni" id="ani-clients" onclick="aTab('clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
-    <button class="ni" id="ani-svcs" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni" id="ani-svcs" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Мастера</span></button>
     <button class="ni" id="ani-prof" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
   </div>
 </div>
@@ -387,7 +387,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <button class="ni" onclick="aTab('dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
     <button class="ni on" onclick="aTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span></button>
     <button class="ni" onclick="aTab('clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
-    <button class="ni" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Мастера</span></button>
     <button class="ni" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
   </div>
 </div>
@@ -406,7 +406,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <button class="ni" onclick="aTab('dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
     <button class="ni" onclick="aTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span></button>
     <button class="ni on" onclick="aTab('clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
-    <button class="ni" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Мастера</span></button>
     <button class="ni" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
   </div>
 </div>
@@ -426,7 +426,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <button class="ni" onclick="aTab('dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
     <button class="ni" onclick="aTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span></button>
     <button class="ni" onclick="aTab('clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
-    <button class="ni on" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni on" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Мастера</span></button>
     <button class="ni" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
   </div>
 </div>
@@ -440,7 +440,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <button class="ni" onclick="aTab('dash')"><div class="ni-bar"></div><span class="ni-ico">🏠</span><span class="ni-lbl">Главная</span></button>
     <button class="ni" onclick="aTab('sched')"><div class="ni-bar"></div><span class="ni-ico">📆</span><span class="ni-lbl">Записи</span></button>
     <button class="ni" onclick="aTab('clients')"><div class="ni-bar"></div><span class="ni-ico">👥</span><span class="ni-lbl">Клиенты</span></button>
-    <button class="ni" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Услуги</span></button>
+    <button class="ni" onclick="aTab('svcs')"><div class="ni-bar"></div><span class="ni-ico">💎</span><span class="ni-lbl">Мастера</span></button>
     <button class="ni on" onclick="aTab('prof')"><div class="ni-bar"></div><span class="ni-ico">👤</span><span class="ni-lbl">Профиль</span></button>
   </div>
 </div>
@@ -1744,7 +1744,7 @@ function renderProf(){
       <button class="menu-item" onclick="openAnalytics()"><div class="menu-ico mi-t">📊</div><div class="menu-txt">Аналитика</div><span class="menu-arr">›</span></button>
       <button class="menu-item" onclick="openSalaryCalc()"><div class="menu-ico mi-b">💵</div><div class="menu-txt">Расчёт зарплаты</div><span class="menu-arr">›</span></button>
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">Zap is... · by @mathian</div>`;
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:24px">Zap is... · Admin Panel · by @mathian</div>`;
 }
 
 function openSalaryCalc(){
